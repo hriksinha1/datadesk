@@ -195,8 +195,10 @@ export default function BookingDetail() {
                 <div className="font-medium text-gray-900">{booking.guests}</div>
               </div>
               <div className="col-span-2">
-                <div className="text-xs font-medium text-gray-500 mb-1">Room Type</div>
-                <div className="font-medium text-gray-900">{booking.room_type || 'Standard'}</div>
+                <div className="text-xs font-medium text-gray-500 mb-1">Room Allocated</div>
+                <div className="font-semibold text-gray-900">
+                  {booking.room_number ? `Room ${booking.room_number} · ` : ''}{booking.room_type || 'Standard'}
+                </div>
               </div>
             </div>
           </div>

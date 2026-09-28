@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link, useOutletContext } from 'react-router-dom';
+import { useNavigate, Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { repository } from '../../lib/repository';
 import { generateId, fmtINR } from '../../lib/utils/formatters';
 import { AppContextType } from '../../components/layout/AppShell';
@@ -7,7 +7,12 @@ import { ChevronRight, ArrowLeft, CheckCircle, UserPlus, Users, MapPin, CreditCa
 
 export default function NewBooking() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { propertyFilter } = useOutletContext<AppContextType>();
+
+  const qDate = searchParams.get('date');
+  const qRoom = searchParams.get('room');
+  const qProp = searchParams.get('prop');
   
   const [properties, setProperties] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -17,12 +22,20 @@ export default function NewBooking() {
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
 
   // Step 1: Stay
-  const [propertyId, setPropertyId] = useState(propertyFilter);
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
+  const [propertyId, setPropertyId] = useState(qProp || propertyFilter);
+  const [checkIn, setCheckIn] = useState(qDate || '');
+  const [checkOut, setCheckOut] = useState(() => {
+    if (qDate) {
+      const d = new Date(qDate);
+      d.setDate(d.getDate() + 2);
+      return d.toISOString().split('T')[0];
+    }
+    return '';
+  });
   const [rooms, setRooms] = useState(1);
   const [guests, setGuests] = useState(2);
   const [roomType, setRoomType] = useState('Standard');
+  const [roomNumber, setRoomNumber] = useState(qRoom || '');
   const [nights, setNights] = useState(0);
 
   // Step 2: Customer
@@ -142,6 +155,7 @@ export default function NewBooking() {
         rooms,
         guests,
         room_type: roomType,
+        room_number: roomNumber || undefined,
         base_amount: numBase,
         tax_enabled: taxEnabled,
         tax_rate: taxEnabled ? taxRate : 0,
@@ -241,26 +255,32 @@ export default function NewBooking() {
                 </div>
                 {nights > 0 && <div className="text-sm text-gray-500 font-medium">{nights} night(s) selected</div>}
                 
-                <div className="grid grid-cols-3 gap-4 pt-2">
+                <div className="grid grid-cols-4 gap-3 pt-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Rooms</label>
-                    <input type="number" min="1" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={rooms} onChange={e => setRooms(Number(e.target.value))} />
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Rooms</label>
+                    <input type="number" min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 text-sm" value={rooms} onChange={e => setRooms(Number(e.target.value))} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Guests</label>
-                    <input type="number" min="1" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={guests} onChange={e => setGuests(Number(e.target.value))} />
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Guests</label>
+                    <input type="number" min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 text-sm" value={guests} onChange={e => setGuests(Number(e.target.value))} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm" value={roomType} onChange={e => setRoomType(e.target.value)}>
-                      <option>Standard</option>
-                      <option>Deluxe</option>
-                      <option>Suite</option>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+                    <select className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 bg-white text-xs sm:text-sm" value={roomType} onChange={e => setRoomType(e.target.value)}>
+                      <option value="Deluxe Room">Deluxe</option>
+                      <option value="Executive Suite">Suite</option>
+                      <option value="Standard Room">Standard</option>
+                      <option value="Cottage Villa">Cottage</option>
+                      <option value="Dorm Bed">Dorm Bed</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Room #</label>
+                    <input type="text" placeholder="e.g. 101" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 text-sm" value={roomNumber} onChange={e => setRoomNumber(e.target.value)} />
                   </div>
                 </div>
                 <div className="pt-2">
-                  <button type="button" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors" onClick={handleNext}>Continue</button>
+                  <button type="button" className="px-5 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer" onClick={handleNext}>Continue to Guest Info →</button>
                 </div>
               </div>
             )}

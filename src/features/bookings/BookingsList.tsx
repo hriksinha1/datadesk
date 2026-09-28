@@ -1,36 +1,73 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { repository } from '../../lib/repository';
-import { Plus, Search, Filter, CalendarDays } from 'lucide-react';
-import { fmtDate, fmtINR } from '../../lib/utils/formatters';
+import { Booking, Customer, Property, Payment } from '../../lib/repository/types';
 import { AppContextType } from '../../components/layout/AppShell';
+import { Plus, Download } from 'lucide-react';
+
+import BookingMetricsBar from './components/BookingMetricsBar';
+import BookingToolbar from './components/BookingToolbar';
+import BookingTableView from './components/BookingTableView';
+import HotelCalendarView from './components/HotelCalendarView';
+import BookingAnalyticsView from './components/BookingAnalyticsView';
 
 export default function BookingsList() {
   const { propertyFilter } = useOutletContext<AppContextType>();
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filters & View State
+  const initialView = (searchParams.get('view') as 'list' | 'calendar' | 'analytics') || 'list';
+  const [activeView, setActiveView] = useState<'list' | 'calendar' | 'analytics'>(initialView);
   const [search, setSearch] = useState('');
-  const navigate = useNavigate();
+  const [statusFilter, setStatusFilter] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('');
+
+  // Sync activeView with searchParams
+  const handleViewChange = (view: 'list' | 'calendar' | 'analytics') => {
+    setActiveView(view);
+    setSearchParams((prev) => {
+      prev.set('view', view);
+      return prev;
+    });
+  };
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const [bRes, cRes, pRes] = await Promise.all([
-          repository.getBookings(propertyFilter),
+        const [bRes, cRes, pRes, payRes] = await Promise.all([
+          repository.getBookings(propertyFilter || undefined),
           repository.getCustomers(),
-          repository.getProperties()
+          repository.getProperties(),
+          repository.getAllPayments(propertyFilter || undefined),
         ]);
-        const custMap = cRes.reduce((acc: any, c: any) => ({...acc, [c.id]: c}), {});
-        const propMap = pRes.reduce((acc: any, p: any) => ({...acc, [p.id]: p}), {});
-        const enhanced = bRes.map((b: any) => ({
+
+        const custMap = cRes.reduce<Record<string, Customer>>((acc, c) => {
+          acc[c.id] = c;
+          return acc;
+        }, {});
+
+        const propMap = pRes.reduce<Record<string, Property>>((acc, p) => {
+          acc[p.id] = p;
+          return acc;
+        }, {});
+
+        const enhanced = bRes.map((b) => ({
           ...b,
           customer: custMap[b.customer_id],
-          property: propMap[b.property_id]
-        })).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          property: propMap[b.property_id],
+        }));
+
         setBookings(enhanced);
+        setProperties(pRes.filter((p) => p.active));
+        setPayments(payRes);
       } catch (err) {
-        console.error(err);
+        console.error('Failed to load bookings data', err);
       } finally {
         setLoading(false);
       }
@@ -38,110 +75,152 @@ export default function BookingsList() {
     load();
   }, [propertyFilter]);
 
-  const filteredBookings = bookings.filter(b => 
-    b.booking_no.toLowerCase().includes(search.toLowerCase()) ||
-    b.customer?.name?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Pre-calculate payments by booking ID
+  const paymentsByBooking = useMemo(() => {
+    return payments.reduce<Record<string, number>>((acc, p) => {
+      if (p.status === 'Completed' || p.status === 'Recorded') {
+        acc[p.booking_id] = (acc[p.booking_id] || 0) + Number(p.amount);
+      }
+      return acc;
+    }, {});
+  }, [payments]);
+
+  // Derived filter logic
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !search ||
+        b.booking_no.toLowerCase().includes(q) ||
+        b.customer?.name?.toLowerCase().includes(q) ||
+        b.customer?.phone?.includes(q) ||
+        b.room_number?.toLowerCase().includes(q) ||
+        b.room_type?.toLowerCase().includes(q) ||
+        b.property?.name?.toLowerCase().includes(q);
+
+      const matchesStatus = !statusFilter || b.booking_status === statusFilter;
+      const matchesPayment = !paymentFilter || b.payment_status === paymentFilter;
+
+      return matchesSearch && matchesStatus && matchesPayment;
+    });
+  }, [bookings, search, statusFilter, paymentFilter]);
+
+  // Metrics
+  const todayStr = new Date().toISOString().split('T')[0];
+  const inHouseCount = bookings.filter((b) => b.check_in <= todayStr && b.check_out >= todayStr && b.booking_status === 'Checked In').length;
+  const arrivalsTodayCount = bookings.filter((b) => b.check_in === todayStr).length;
+  const departuresTodayCount = bookings.filter((b) => b.check_out === todayStr).length;
+
+  const totalBookingValue = bookings.reduce((sum, b) => sum + Number(b.grand_total), 0);
+  const totalPaid = payments
+    .filter((p) => p.status === 'Completed' || p.status === 'Recorded')
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const outstandingBalance = Math.max(0, totalBookingValue - totalPaid);
+
+  const hasActiveFilters = Boolean(search || statusFilter || paymentFilter);
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setStatusFilter('');
+    setPaymentFilter('');
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Booking No,Guest Name,Property,Check In,Check Out,Nights,Room Type,Room No,Grand Total,Payment Status,Status\n'];
+    const rows = filteredBookings.map((b) =>
+      `"${b.booking_no}","${b.customer?.name || ''}","${b.property?.name || ''}","${b.check_in}","${b.check_out}",${b.nights},"${b.room_type}","${b.room_number || ''}",${b.grand_total},"${b.payment_status}","${b.booking_status}"\n`
+    );
+    const blob = new Blob([...headers, ...rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bookings-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
 
   if (loading) {
     return (
-      <div className="animate-pulse space-y-6">
-        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-        <div className="h-64 bg-white border border-gray-100 rounded-xl shadow-sm"></div>
+      <div className="space-y-6 animate-pulse max-w-7xl mx-auto">
+        <div className="h-10 bg-slate-200 rounded-lg w-1/4"></div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-20 bg-white border border-slate-200 rounded-xl"></div>
+          ))}
+        </div>
+        <div className="h-96 bg-white border border-slate-200 rounded-xl"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* 1. Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Bookings</h1>
-          <p className="text-sm text-gray-500 mt-1">{propertyFilter ? 'Manage reservations for the selected property.' : 'Manage all reservations across your properties.'}</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Bookings & Reservations
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            {propertyFilter
+              ? 'Manage room reservations, check-ins, and unit folios for the selected property.'
+              : 'Master reservation workspace across all properties in your portfolio.'}
+          </p>
         </div>
-        <div>
-          <Link to="/app/bookings/new" className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
-            <Plus size={16} /> New Booking
+
+        <div className="flex items-center gap-2.5">
+          <Link
+            to="/app/bookings/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-all shadow-xs cursor-pointer"
+          >
+            <Plus size={15} />
+            <span>New Booking</span>
           </Link>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-white flex justify-between items-center gap-4 flex-wrap">
-          <div className="relative max-w-sm w-full">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={16} className="text-gray-400" />
-            </div>
-            <input 
-              type="text" 
-              placeholder="Search by booking # or guest name..." 
-              className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm bg-gray-50"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <button className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-            <Filter size={16} /> Filters
-          </button>
-        </div>
+      {/* 2. Top Summary Metrics Bar */}
+      <BookingMetricsBar
+        totalCount={bookings.length}
+        inHouseCount={inHouseCount}
+        arrivalsTodayCount={arrivalsTodayCount}
+        departuresTodayCount={departuresTodayCount}
+        outstandingBalance={outstandingBalance}
+      />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 font-medium">Booking</th>
-                <th className="px-6 py-3 font-medium">Guest</th>
-                <th className="px-6 py-3 font-medium">Property</th>
-                <th className="px-6 py-3 font-medium">Stay Dates</th>
-                <th className="px-6 py-3 font-medium text-right">Amount</th>
-                <th className="px-6 py-3 font-medium">Payment Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {filteredBookings.map(b => {
-                const isPaid = b.payment_status === 'Paid' || b.payment_status === 'Fully Paid';
-                const isPartial = b.payment_status === 'Partially Paid';
-                
-                return (
-                  <tr key={b.id} className="hover:bg-gray-50 transition-colors cursor-pointer group" onClick={() => navigate(`/app/bookings/${b.id}`)}>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900 group-hover:text-indigo-600 transition-colors">{b.booking_no}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{b.customer?.name || '—'}</div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{b.property?.name || '—'}</td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {fmtDate(b.check_in)} – {fmtDate(b.check_out)}
-                    </td>
-                    <td className="px-6 py-4 text-right font-medium text-gray-900 tabular-nums">
-                      {fmtINR(b.grand_total)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        isPaid ? 'bg-green-100 text-green-700' : 
-                        isPartial ? 'bg-amber-100 text-amber-700' : 
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {b.payment_status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredBookings.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <div className="text-gray-400 mb-2"><CalendarDays size={32} className="mx-auto" /></div>
-                    <div className="text-gray-900 font-medium">No bookings found</div>
-                    <p className="text-gray-500 text-sm mt-1">Try adjusting your filters or create a new booking.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* 3. Toolbar (Search, View Switcher: List/Calendar/Analytics, Filters) */}
+      <BookingToolbar
+        searchTerm={search}
+        onSearchChange={setSearch}
+        activeView={activeView}
+        onViewChange={handleViewChange}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        paymentFilter={paymentFilter}
+        onPaymentFilterChange={setPaymentFilter}
+        onExport={handleExportCSV}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+      />
+
+      {/* 4. Active View Content */}
+      {activeView === 'list' && (
+        <BookingTableView
+          bookings={filteredBookings}
+          paymentsByBooking={paymentsByBooking}
+        />
+      )}
+
+      {activeView === 'calendar' && (
+        <HotelCalendarView
+          bookings={bookings}
+          properties={properties}
+          selectedPropertyId={propertyFilter || undefined}
+        />
+      )}
+
+      {activeView === 'analytics' && (
+        <BookingAnalyticsView bookings={bookings} />
+      )}
     </div>
   );
 }

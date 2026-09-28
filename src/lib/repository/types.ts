@@ -36,6 +36,8 @@ export interface Booking {
   rooms: number;
   guests: number;
   room_type: string;
+  room_number?: string;
+  notes?: string;
   base_amount: number;
   tax_enabled: boolean;
   tax_rate: number;
