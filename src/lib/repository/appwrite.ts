@@ -24,6 +24,10 @@ export const APPWRITE_COLLECTIONS = {
   settings: 'settings',
 };
 
+function fromAppwriteDocument<T>(document: { $id: string }): T {
+  return { ...document, id: document.$id } as unknown as T;
+}
+
 export class AppwriteRepository implements IRepository {
   private dbId = databaseId;
 
@@ -37,14 +41,14 @@ export class AppwriteRepository implements IRepository {
   async getProperties(): Promise<Property[]> {
     this.checkConfigured();
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.properties);
-    return res.documents as unknown as Property[];
+    return res.documents.map((document) => fromAppwriteDocument<Property>(document));
   }
 
   async getProperty(id: string): Promise<Property | null> {
     this.checkConfigured();
     try {
       const doc = await databases.getDocument(this.dbId, APPWRITE_COLLECTIONS.properties, id);
-      return doc as unknown as Property;
+      return fromAppwriteDocument<Property>(doc);
     } catch {
       return null;
     }
@@ -58,7 +62,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as Property;
+    return fromAppwriteDocument<Property>(doc);
   }
 
   async updateProperty(id: string, data: Partial<Property>): Promise<Property> {
@@ -69,7 +73,7 @@ export class AppwriteRepository implements IRepository {
       id,
       data
     );
-    return doc as unknown as Property;
+    return fromAppwriteDocument<Property>(doc);
   }
 
   // --- Units ---
@@ -78,14 +82,14 @@ export class AppwriteRepository implements IRepository {
     const queries: string[] = [Query.orderAsc('sort_order')];
     if (propertyId) queries.push(Query.equal('property_id', propertyId));
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.units, queries);
-    return res.documents as unknown as Unit[];
+    return res.documents.map((document) => fromAppwriteDocument<Unit>(document));
   }
 
   async getUnit(id: string): Promise<Unit | null> {
     this.checkConfigured();
     try {
       const doc = await databases.getDocument(this.dbId, APPWRITE_COLLECTIONS.units, id);
-      return doc as unknown as Unit;
+      return fromAppwriteDocument<Unit>(doc);
     } catch {
       return null;
     }
@@ -99,7 +103,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as Unit;
+    return fromAppwriteDocument<Unit>(doc);
   }
 
   async updateUnit(id: string, data: Partial<Unit>): Promise<Unit> {
@@ -110,7 +114,7 @@ export class AppwriteRepository implements IRepository {
       id,
       data
     );
-    return doc as unknown as Unit;
+    return fromAppwriteDocument<Unit>(doc);
   }
 
   // --- Unit Blocks ---
@@ -119,7 +123,7 @@ export class AppwriteRepository implements IRepository {
     const queries: string[] = [];
     if (propertyId) queries.push(Query.equal('property_id', propertyId));
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.unit_blocks, queries);
-    return res.documents as unknown as UnitBlock[];
+    return res.documents.map((document) => fromAppwriteDocument<UnitBlock>(document));
   }
 
   async createUnitBlock(data: Omit<UnitBlock, 'id' | 'created_at'>): Promise<UnitBlock> {
@@ -130,7 +134,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as UnitBlock;
+    return fromAppwriteDocument<UnitBlock>(doc);
   }
 
   async deleteUnitBlock(id: string): Promise<void> {
@@ -144,14 +148,14 @@ export class AppwriteRepository implements IRepository {
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.customers, [
       Query.orderDesc('created_at')
     ]);
-    return res.documents as unknown as Customer[];
+    return res.documents.map((document) => fromAppwriteDocument<Customer>(document));
   }
 
   async getCustomer(id: string): Promise<Customer | null> {
     this.checkConfigured();
     try {
       const doc = await databases.getDocument(this.dbId, APPWRITE_COLLECTIONS.customers, id);
-      return doc as unknown as Customer;
+      return fromAppwriteDocument<Customer>(doc);
     } catch {
       return null;
     }
@@ -165,7 +169,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as Customer;
+    return fromAppwriteDocument<Customer>(doc);
   }
 
   // --- Bookings ---
@@ -174,14 +178,14 @@ export class AppwriteRepository implements IRepository {
     const queries = [Query.orderDesc('created_at')];
     if (propertyId) queries.push(Query.equal('property_id', propertyId));
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.bookings, queries);
-    return res.documents as unknown as Booking[];
+    return res.documents.map((document) => fromAppwriteDocument<Booking>(document));
   }
 
   async getBooking(id: string): Promise<Booking | null> {
     this.checkConfigured();
     try {
       const doc = await databases.getDocument(this.dbId, APPWRITE_COLLECTIONS.bookings, id);
-      return doc as unknown as Booking;
+      return fromAppwriteDocument<Booking>(doc);
     } catch {
       return null;
     }
@@ -195,7 +199,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as Booking;
+    return fromAppwriteDocument<Booking>(doc);
   }
 
   async updateBooking(id: string, data: Partial<Booking>): Promise<Booking> {
@@ -206,7 +210,7 @@ export class AppwriteRepository implements IRepository {
       id,
       data
     );
-    return doc as unknown as Booking;
+    return fromAppwriteDocument<Booking>(doc);
   }
 
   // --- Payments ---
@@ -215,7 +219,7 @@ export class AppwriteRepository implements IRepository {
     const queries = [Query.orderDesc('created_at')];
     if (bookingId) queries.push(Query.equal('booking_id', bookingId));
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.payments, queries);
-    return res.documents as unknown as Payment[];
+    return res.documents.map((document) => fromAppwriteDocument<Payment>(document));
   }
 
   async getAllPayments(propertyId?: string): Promise<Payment[]> {
@@ -223,7 +227,7 @@ export class AppwriteRepository implements IRepository {
     const queries = [Query.orderDesc('created_at')];
     if (propertyId) queries.push(Query.equal('property_id', propertyId));
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.payments, queries);
-    return res.documents as unknown as Payment[];
+    return res.documents.map((document) => fromAppwriteDocument<Payment>(document));
   }
 
   async createPayment(data: Omit<Payment, 'id' | 'created_at'>): Promise<Payment> {
@@ -234,7 +238,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as Payment;
+    return fromAppwriteDocument<Payment>(doc);
   }
 
   // --- Notifications ---
@@ -243,7 +247,7 @@ export class AppwriteRepository implements IRepository {
     const queries = [Query.orderDesc('created_at')];
     if (bookingId) queries.push(Query.equal('booking_id', bookingId));
     const res = await databases.listDocuments(this.dbId, APPWRITE_COLLECTIONS.notifications, queries);
-    return res.documents as unknown as Notification[];
+    return res.documents.map((document) => fromAppwriteDocument<Notification>(document));
   }
 
   async createNotification(data: Omit<Notification, 'id' | 'created_at'>): Promise<Notification> {
@@ -254,7 +258,7 @@ export class AppwriteRepository implements IRepository {
       ID.unique(),
       { ...data, created_at: new Date().toISOString() }
     );
-    return doc as unknown as Notification;
+    return fromAppwriteDocument<Notification>(doc);
   }
 
   // --- Settings ---

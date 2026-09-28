@@ -142,15 +142,15 @@
 /* Hero and the branded tape rule */
 .mk-hero { position: relative; overflow: hidden; padding-block: clamp(42px, 5vw, 76px) 60px; background: var(--mk-paper); }
 .mk-hero-shell { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; column-gap: clamp(16px, 2vw, 28px); row-gap: 8px; }
-.mk-hero-copy { position: relative; z-index: 1; grid-column: 1 / span 8; grid-row: 1; padding-block: 10px 0; }
+.mk-hero-copy { position: relative; z-index: 1; grid-column: 1 / span 7; grid-row: 1; padding-block: 10px 0; }
 .mk-hero-context { margin-bottom: 20px !important; color: var(--mk-ink-600); font-size: .9rem; font-weight: 500; }
 .mk-hero-context span { color: var(--mk-brass-700); font-weight: 600; font-variant-numeric: tabular-nums; }
-.mk-hero h1 { max-width: 18ch; color: var(--mk-ink-950); font-size: clamp(2.75rem, 1.5rem + 4.5vw, 5.25rem); font-weight: 600; line-height: 1.02; letter-spacing: 0; }
+.mk-hero h1 { max-width: 20ch; color: var(--mk-ink-950); font-size: clamp(3rem, 1rem + 3.4vw, 4.5rem); font-weight: 600; line-height: 1.02; letter-spacing: 0; }
 .mk-hero-lead { max-width: 42ch; margin-top: 22px !important; color: var(--mk-ink-600); font-size: clamp(1.125rem, 1.05rem + .35vw, 1.375rem); line-height: 1.5; }
 .mk-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 28px; }
 .mk-hero-note { margin-top: 14px !important; color: var(--mk-ink-500); font-size: .86rem; }
 .mk-hero-note span { margin-inline: 5px; color: var(--mk-brass-700); }
-.mk-hero-product { position: relative; z-index: 2; grid-column: 5 / -1; grid-row: 2; width: 100%; margin-block: 0; }
+.mk-hero-product { position: relative; z-index: 2; grid-column: 7 / -1; grid-row: 1; width: 100%; margin-block: 0; }
 .mk-hero-product .mk-product-frame { box-shadow: var(--mk-shadow-frame); }
 .mk-hero-scroll { position: absolute; bottom: 0; left: clamp(20px, 3.2vw, 48px); display: inline-flex; min-height: 40px; align-items: center; gap: 8px; color: var(--mk-ink-500) !important; font-size: .85rem; }
 .mk-hero-scroll:hover { color: var(--mk-pine-700) !important; }
