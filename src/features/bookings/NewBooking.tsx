@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/FormControls';
 import { Money } from '../../components/ui/Typography';
 import { generateId } from '../../lib/utils/formatters';
-import { isBookingOverlapping } from '../../lib/analytics';
+import { isBookingOverlapping, todayISO } from '../../lib/analytics';
 import { useToast } from '../../components/ui/Toast';
 
 export default function NewBooking() {
