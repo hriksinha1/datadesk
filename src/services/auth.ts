@@ -9,28 +9,42 @@ export interface UserProfile {
   propertyName?: string;
   propertyType?: string;
   unitCount?: string;
+  isDemo?: boolean;
 }
 
 const LOCAL_STORAGE_KEY = 'mytrackyo_session';
 const LOCAL_USER_KEY = 'mytrackyo_user';
 
-function createLocalFallbackUser(email: string, fullName?: string, propertyName?: string, propertyType?: string): UserProfile {
-  const derivedName = fullName || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+function createLocalFallbackUser(
+  email: string,
+  fullName?: string,
+  propertyName?: string,
+  propertyType?: string,
+  isDemo = true
+): UserProfile {
+  const derivedName =
+    fullName ||
+    email
+      .split('@')[0]
+      .replace(/[._]/g, ' ')
+      .replace(/\b\w/g, (l) => l.toUpperCase());
   return {
     id: 'user-' + Date.now(),
     name: derivedName,
     email: email.trim().toLowerCase(),
     role: 'owner',
-    propertyName: propertyName || 'The Fern Residency',
-    propertyType: propertyType || 'Boutique Hotel',
+    propertyName: propertyName || 'MyTrackYo Property',
+    propertyType: propertyType || 'Hotel',
     unitCount: '24',
+    isDemo,
   };
 }
 
-function isNetworkOrFetchError(err: any): boolean {
-  if (!err) return false;
-  const msg = (err.message || '').toLowerCase();
-  const name = (err.name || '').toLowerCase();
+function isNetworkOrFetchError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const anyErr = err as { message?: string; name?: string; code?: number };
+  const msg = (anyErr.message || '').toLowerCase();
+  const name = (anyErr.name || '').toLowerCase();
   return (
     msg.includes('fetch') ||
     msg.includes('network') ||
@@ -39,7 +53,7 @@ function isNetworkOrFetchError(err: any): boolean {
     msg.includes('project_not_found') ||
     msg.includes('general_unknown_origin') ||
     name === 'typeerror' ||
-    err.code === 0
+    anyErr.code === 0
   );
 }
 
@@ -52,23 +66,36 @@ export const authService = {
     if (isAppwriteConfigured) {
       try {
         const appwriteUser = await account.get();
+        const prefs = (appwriteUser.prefs || {}) as Record<string, string>;
         const profile: UserProfile = {
           id: appwriteUser.$id,
           name: appwriteUser.name || appwriteUser.email.split('@')[0],
           email: appwriteUser.email,
-          role: 'owner',
-          propertyName: 'The Fern Residency',
-          propertyType: 'Boutique Hotel',
+          role: (prefs.role as UserProfile['role']) || 'owner',
+          propertyName: prefs.propertyName || undefined,
+          propertyType: prefs.propertyType || undefined,
+          isDemo: false,
         };
         return profile;
-      } catch (err) {
-        if (!isNetworkOrFetchError(err)) {
-          // Normal unauthenticated session
+      } catch {
+        // Appwrite session doesn't exist or is invalid
+        // If there was a demo session explicitly stored, allow it
+        const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (stored === 'demo') {
+          const userStr = localStorage.getItem(LOCAL_USER_KEY);
+          if (userStr) {
+            try {
+              return JSON.parse(userStr);
+            } catch {
+              // ignore
+            }
+          }
         }
+        return null;
       }
     }
 
-    // Local fallback session
+    // Local fallback session when Appwrite is not configured
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!stored) return null;
 
@@ -81,7 +108,7 @@ export const authService = {
       }
     }
 
-    return createLocalFallbackUser('owner@thefernresidency.com', 'Rohan Sharma');
+    return createLocalFallbackUser('owner@mytrackyo.local', 'Property Manager', undefined, undefined, true);
   },
 
   async login(email: string, password: string): Promise<UserProfile> {
@@ -91,38 +118,34 @@ export const authService = {
       try {
         await account.createEmailPasswordSession(cleanEmail, password);
         const appwriteUser = await account.get();
+        const prefs = (appwriteUser.prefs || {}) as Record<string, string>;
         const profile: UserProfile = {
           id: appwriteUser.$id,
           name: appwriteUser.name || cleanEmail.split('@')[0],
           email: appwriteUser.email,
-          role: 'owner',
-          propertyName: 'The Fern Residency',
-          propertyType: 'Boutique Hotel',
+          role: (prefs.role as UserProfile['role']) || 'owner',
+          propertyName: prefs.propertyName || undefined,
+          propertyType: prefs.propertyType || undefined,
+          isDemo: false,
         };
-        localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
+        localStorage.setItem(LOCAL_STORAGE_KEY, 'appwrite');
         localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
         return profile;
-      } catch (err: any) {
-        console.warn('Appwrite login attempt:', err);
-        // If network, fetch, CORS, or invalid project occurs, fallback to seamless session
+      } catch (err: unknown) {
         if (isNetworkOrFetchError(err)) {
-          console.info('Appwrite network/CORS error detected. Logging in with authenticated local workspace session.');
-          const fallbackProfile = createLocalFallbackUser(cleanEmail);
-          localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
-          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(fallbackProfile));
-          return fallbackProfile;
+          throw new Error("Can't reach the server. Check your connection and try again.");
         }
-        // If Appwrite returned a specific 401 or credential mismatch, but user is testing, allow local fallback if password is provided
-        if (err.code === 401 || err.type === 'user_invalid_credentials') {
+        const anyErr = err as { code?: number; type?: string; message?: string };
+        if (anyErr.code === 401 || anyErr.type === 'user_invalid_credentials') {
           throw new Error('Invalid email or password. Please verify your credentials or use the sample workspace.');
         }
-        throw new Error(err.message || 'Unable to sign in. Please try again.');
+        throw new Error(anyErr.message || 'Unable to sign in. Please try again.');
       }
     }
 
-    // Local simulation for demo/evaluation
-    const profile = createLocalFallbackUser(cleanEmail);
-    localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
+    // Local simulation ONLY when Appwrite is NOT configured
+    const profile = createLocalFallbackUser(cleanEmail, undefined, undefined, undefined, true);
+    localStorage.setItem(LOCAL_STORAGE_KEY, 'demo');
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
     return profile;
   },
@@ -139,48 +162,54 @@ export const authService = {
 
     if (isAppwriteConfigured) {
       try {
-        await account.create(ID.unique(), cleanEmail, data.password, data.fullName);
+        const userId = ID.unique();
+        await account.create(userId, cleanEmail, data.password, data.fullName);
         await account.createEmailPasswordSession(cleanEmail, data.password);
-        const appwriteUser = await account.get();
+        try {
+          await account.updatePrefs({
+            propertyName: data.propertyName,
+            propertyType: data.propertyType,
+            unitCount: data.unitCount,
+            role: 'owner',
+          });
+        } catch {
+          // Non-blocking
+        }
+
         const profile: UserProfile = {
-          id: appwriteUser.$id,
+          id: userId,
           name: data.fullName,
-          email: data.email,
+          email: cleanEmail,
           role: 'owner',
           propertyName: data.propertyName,
           propertyType: data.propertyType,
           unitCount: data.unitCount,
+          isDemo: false,
         };
-        localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
+        localStorage.setItem(LOCAL_STORAGE_KEY, 'appwrite');
         localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
         return profile;
-      } catch (err: any) {
-        console.warn('Appwrite signup attempt:', err);
+      } catch (err: unknown) {
         if (isNetworkOrFetchError(err)) {
-          const fallbackProfile = createLocalFallbackUser(
-            cleanEmail,
-            data.fullName,
-            data.propertyName,
-            data.propertyType
-          );
-          fallbackProfile.unitCount = data.unitCount;
-          localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
-          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(fallbackProfile));
-          return fallbackProfile;
+          throw new Error("Can't reach the server. Check your connection and try again.");
         }
-        throw new Error(err.message || 'Unable to create workspace.');
+        const anyErr = err as { message?: string };
+        throw new Error(anyErr.message || 'Signup failed. Please try again.');
       }
     }
 
-    // Local simulation
-    const profile = createLocalFallbackUser(
-      cleanEmail,
-      data.fullName,
-      data.propertyName,
-      data.propertyType
-    );
-    profile.unitCount = data.unitCount;
-    localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
+    // Local simulation for demo
+    const profile: UserProfile = {
+      id: 'user-' + Date.now(),
+      name: data.fullName,
+      email: cleanEmail,
+      role: 'owner',
+      propertyName: data.propertyName,
+      propertyType: data.propertyType,
+      unitCount: data.unitCount,
+      isDemo: true,
+    };
+    localStorage.setItem(LOCAL_STORAGE_KEY, 'demo');
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
     return profile;
   },
@@ -201,52 +230,40 @@ export const authService = {
     const demoProfile: UserProfile = {
       id: 'demo-user-fern',
       name: 'Rohan Sharma',
-      email: 'owner@thefernresidency.com',
+      email: 'owner@mytrackyo.local',
       role: 'owner',
       propertyName: 'The Fern Residency',
       propertyType: 'Boutique Hotel',
       unitCount: '24',
+      isDemo: true,
     };
-    localStorage.setItem(LOCAL_STORAGE_KEY, 'true');
+    localStorage.setItem(LOCAL_STORAGE_KEY, 'demo');
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(demoProfile));
     return demoProfile;
   },
 
   async sendPasswordReset(email: string): Promise<void> {
     if (isAppwriteConfigured) {
-      try {
-        const redirectUrl = `${window.location.origin}/reset-password`;
-        await account.createRecovery(email, redirectUrl);
-        return;
-      } catch (err) {
-        console.warn('Appwrite recovery error:', err);
-      }
+      const redirectUrl = `${window.location.origin}/reset-password`;
+      await account.createRecovery(email, redirectUrl);
+      return;
     }
-    // Simulated delay
     await new Promise((r) => setTimeout(r, 400));
   },
 
   async confirmPasswordReset(userId: string, secret: string, password: string): Promise<void> {
     if (isAppwriteConfigured) {
-      try {
-        await account.updateRecovery(userId, secret, password);
-        return;
-      } catch (err) {
-        console.warn('Appwrite recovery update error:', err);
-      }
+      await account.updateRecovery(userId, secret, password);
+      return;
     }
     await new Promise((r) => setTimeout(r, 400));
   },
 
   async sendVerificationEmail(): Promise<void> {
     if (isAppwriteConfigured) {
-      try {
-        const redirectUrl = `${window.location.origin}/verify-email`;
-        await account.createVerification(redirectUrl);
-        return;
-      } catch (err) {
-        console.warn('Appwrite verification email error:', err);
-      }
+      const redirectUrl = `${window.location.origin}/verify-email`;
+      await account.createVerification(redirectUrl);
+      return;
     }
     await new Promise((r) => setTimeout(r, 400));
   },

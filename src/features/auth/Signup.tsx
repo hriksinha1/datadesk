@@ -47,7 +47,7 @@ export default function Signup() {
   return (
     <AuthLayout
       title="Set up your property workspace"
-      subtitle="Start your 14-day free trial. No credit card required."
+      subtitle="Create your free workspace."
     >
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">

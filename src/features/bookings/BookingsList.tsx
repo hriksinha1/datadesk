@@ -1,225 +1,363 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
-import { repository } from '../../lib/repository';
-import { Booking, Customer, Property, Payment } from '../../lib/repository/types';
-import { AppContextType } from '../../components/layout/AppShell';
-import { Plus, Download } from 'lucide-react';
-
+import React, { useState, useMemo, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { useBookingsModel, useWorkspaceData } from '../../context/WorkspaceDataContext';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
+import { useToast } from '../../components/ui/Toast';
+import { Booking } from '../../lib/repository/types';
+import { stage } from '../../lib/analytics';
 import BookingMetricsBar from './components/BookingMetricsBar';
 import BookingToolbar from './components/BookingToolbar';
 import BookingTableView from './components/BookingTableView';
 import HotelCalendarView from './components/HotelCalendarView';
 import BookingAnalyticsView from './components/BookingAnalyticsView';
+import AddPaymentModal from './AddPaymentModal';
 
 export default function BookingsList() {
-  const { propertyFilter } = useOutletContext<AppContextType>();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const bookingsModel = useBookingsModel();
+  const { addPayment } = useWorkspaceData();
+
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
+  // URL State
+  const viewParam = searchParams.get('view') || 'list';
+  const activeView = (['list', 'calendar', 'analytics'].includes(viewParam) ? viewParam : 'list') as
+    | 'list'
+    | 'calendar'
+    | 'analytics';
 
-  // Filters & View State
-  const initialView = (searchParams.get('view') as 'list' | 'calendar' | 'analytics') || 'list';
-  const [activeView, setActiveView] = useState<'list' | 'calendar' | 'analytics'>(initialView);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState('');
+  const searchTerm = searchParams.get('q') || '';
+  const stageFilter = searchParams.get('stage') || '';
+  const statusFilter = searchParams.get('status') || '';
+  const paymentFilter = searchParams.get('pay') || '';
+  const sortKey = searchParams.get('sort') || 'relevant';
+  const sortOrder = (searchParams.get('order') || 'asc') as 'asc' | 'desc';
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const [pageSize, setPageSize] = useState(25);
 
-  // Sync activeView with searchParams
-  const handleViewChange = (view: 'list' | 'calendar' | 'analytics') => {
-    setActiveView(view);
-    setSearchParams((prev) => {
-      prev.set('view', view);
-      return prev;
-    });
-  };
+  // Quick Payment Modal
+  const [paymentModalBooking, setPaymentModalBooking] = useState<Booking | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [bRes, cRes, pRes, payRes] = await Promise.all([
-          repository.getBookings(propertyFilter || undefined),
-          repository.getCustomers(),
-          repository.getProperties(),
-          repository.getAllPayments(propertyFilter || undefined),
-        ]);
+  // State Update Helpers with URL Sync
+  const updateQueryParam = useCallback(
+    (key: string, value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set(key, value);
+          } else {
+            next.delete(key);
+          }
+          if (key !== 'page') {
+            next.delete('page'); // Reset to page 1 on filter/view change
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
 
-        const custMap = cRes.reduce<Record<string, Customer>>((acc, c) => {
-          acc[c.id] = c;
-          return acc;
-        }, {});
+  const handleClearFilters = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams();
+        if (prev.get('view')) next.set('view', prev.get('view')!);
+        if (prev.get('property')) next.set('property', prev.get('property')!);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
 
-        const propMap = pRes.reduce<Record<string, Property>>((acc, p) => {
-          acc[p.id] = p;
-          return acc;
-        }, {});
+  const hasActiveFilters = Boolean(searchTerm || stageFilter || statusFilter || paymentFilter);
 
-        const enhanced = bRes.map((b) => ({
-          ...b,
-          customer: custMap[b.customer_id],
-          property: propMap[b.property_id],
-        }));
-
-        setBookings(enhanced);
-        setProperties(pRes.filter((p) => p.active));
-        setPayments(payRes);
-      } catch (err) {
-        console.error('Failed to load bookings data', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [propertyFilter]);
-
-  // Pre-calculate payments by booking ID
-  const paymentsByBooking = useMemo(() => {
-    return payments.reduce<Record<string, number>>((acc, p) => {
-      if (p.status === 'Completed' || p.status === 'Recorded') {
-        acc[p.booking_id] = (acc[p.booking_id] || 0) + Number(p.amount);
-      }
-      return acc;
-    }, {});
-  }, [payments]);
-
-  // Derived filter logic
+  // Filtering Logic
   const filteredBookings = useMemo(() => {
-    return bookings.filter((b) => {
-      const q = search.toLowerCase();
-      const matchesSearch =
-        !search ||
-        b.booking_no.toLowerCase().includes(q) ||
-        b.customer?.name?.toLowerCase().includes(q) ||
-        b.customer?.phone?.includes(q) ||
-        b.room_number?.toLowerCase().includes(q) ||
-        b.room_type?.toLowerCase().includes(q) ||
-        b.property?.name?.toLowerCase().includes(q);
+    return bookingsModel.bookings.filter((b) => {
+      // 1. Cancelled bookings hidden by default unless statusFilter is 'Cancelled' or 'all'
+      if (statusFilter !== 'Cancelled' && statusFilter !== 'all') {
+        if (b.booking_status === 'Cancelled') return false;
+      }
 
-      const matchesStatus = !statusFilter || b.booking_status === statusFilter;
-      const matchesPayment = !paymentFilter || b.payment_status === paymentFilter;
+      // 2. Status Filter
+      if (statusFilter && statusFilter !== 'all') {
+        if (b.booking_status !== statusFilter) return false;
+      }
 
-      return matchesSearch && matchesStatus && matchesPayment;
+      // 3. Stage Filter
+      if (stageFilter) {
+        if (stageFilter === 'balanceDue') {
+          const bal = bookingsModel.balancesByBookingId[b.id]?.balanceDue || 0;
+          if (bal <= 0) return false;
+        } else {
+          const currentStage = stage(b, bookingsModel.today);
+          if (currentStage !== stageFilter) return false;
+        }
+      }
+
+      // 4. Payment Filter
+      if (paymentFilter) {
+        const pStatus = bookingsModel.balancesByBookingId[b.id]?.paymentStatus || b.payment_status;
+        if (pStatus !== paymentFilter) return false;
+      }
+
+      // 5. Search keyword
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase();
+        const guestName = (b.customer?.name || '').toLowerCase();
+        const bNo = (b.booking_no || '').toLowerCase();
+        const room = (b.room_number || '').toLowerCase();
+        const phone = (b.customer?.phone || '').toLowerCase();
+        const prop = (b.property?.name || '').toLowerCase();
+        if (
+          !guestName.includes(q) &&
+          !bNo.includes(q) &&
+          !room.includes(q) &&
+          !phone.includes(q) &&
+          !prop.includes(q)
+        ) {
+          return false;
+        }
+      }
+
+      return true;
     });
-  }, [bookings, search, statusFilter, paymentFilter]);
+  }, [bookingsModel.bookings, bookingsModel.balancesByBookingId, bookingsModel.today, statusFilter, stageFilter, paymentFilter, searchTerm]);
 
-  // Metrics
-  const todayStr = new Date().toISOString().split('T')[0];
-  const inHouseCount = bookings.filter((b) => b.check_in <= todayStr && b.check_out >= todayStr && b.booking_status === 'Checked In').length;
-  const arrivalsTodayCount = bookings.filter((b) => b.check_in === todayStr).length;
-  const departuresTodayCount = bookings.filter((b) => b.check_out === todayStr).length;
+  // Sorting Logic
+  const sortedBookings = useMemo(() => {
+    const list = [...filteredBookings];
+    if (sortKey === 'customer') {
+      list.sort((a, b) => {
+        const nameA = a.customer?.name || '';
+        const nameB = b.customer?.name || '';
+        return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      });
+    } else if (sortKey === 'check_in') {
+      list.sort((a, b) => {
+        return sortOrder === 'asc'
+          ? a.check_in.localeCompare(b.check_in)
+          : b.check_in.localeCompare(a.check_in);
+      });
+    } else if (sortKey === 'grand_total') {
+      list.sort((a, b) => {
+        return sortOrder === 'asc'
+          ? a.grand_total - b.grand_total
+          : b.grand_total - a.grand_total;
+      });
+    } else if (sortKey === 'balance') {
+      list.sort((a, b) => {
+        const balA = bookingsModel.balancesByBookingId[a.id]?.balanceDue || 0;
+        const balB = bookingsModel.balancesByBookingId[b.id]?.balanceDue || 0;
+        return sortOrder === 'asc' ? balA - balB : balB - balA;
+      });
+    } else {
+      // Default: Most relevant (arriving today -> in house -> upcoming ascending -> past descending)
+      list.sort((a, b) => {
+        const rank = (bk: Booking) => {
+          const st = stage(bk, bookingsModel.today);
+          if (st === 'arriving') return 1;
+          if (st === 'inHouse') return 2;
+          if (st === 'departing') return 3;
+          if (st === 'upcoming') return 4;
+          return 5;
+        };
+        const rankDiff = rank(a) - rank(b);
+        if (rankDiff !== 0) return rankDiff;
+        return a.check_in.localeCompare(b.check_in);
+      });
+    }
+    return list;
+  }, [filteredBookings, sortKey, sortOrder, bookingsModel.balancesByBookingId, bookingsModel.today]);
 
-  const totalBookingValue = bookings.reduce((sum, b) => sum + Number(b.grand_total), 0);
-  const totalPaid = payments
-    .filter((p) => p.status === 'Completed' || p.status === 'Recorded')
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-  const outstandingBalance = Math.max(0, totalBookingValue - totalPaid);
+  // Pagination slice
+  const paginatedBookings = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sortedBookings.slice(start, start + pageSize);
+  }, [sortedBookings, page, pageSize]);
 
-  const hasActiveFilters = Boolean(search || statusFilter || paymentFilter);
+  // Export CSV
+  const handleExportCSV = useCallback(() => {
+    const headers = [
+      'Booking No',
+      'Guest Name',
+      'Phone',
+      'Property',
+      'Unit',
+      'Check In',
+      'Check Out',
+      'Nights',
+      'Guests',
+      'Status',
+      'Total (INR)',
+      'Balance (INR)',
+      'Payment Status',
+    ];
 
-  const handleClearFilters = () => {
-    setSearch('');
-    setStatusFilter('');
-    setPaymentFilter('');
-  };
+    const escapeCSV = (val: unknown) => {
+      const s = String(val ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
 
-  const handleExportCSV = () => {
-    const headers = ['Booking No,Guest Name,Property,Check In,Check Out,Nights,Room Type,Room No,Grand Total,Payment Status,Status\n'];
-    const rows = filteredBookings.map((b) =>
-      `"${b.booking_no}","${b.customer?.name || ''}","${b.property?.name || ''}","${b.check_in}","${b.check_out}",${b.nights},"${b.room_type}","${b.room_number || ''}",${b.grand_total},"${b.payment_status}","${b.booking_status}"\n`
-    );
-    const blob = new Blob([...headers, ...rows], { type: 'text/csv' });
+    const rows = sortedBookings.map((b) => {
+      const bal = bookingsModel.balancesByBookingId[b.id]?.balanceDue || 0;
+      return [
+        b.booking_no,
+        b.customer?.name || '',
+        b.customer?.phone || '',
+        b.property?.name || '',
+        b.room_number ? `Room ${b.room_number}` : b.room_type,
+        b.check_in,
+        b.check_out,
+        b.nights,
+        b.guests,
+        b.booking_status,
+        b.grand_total,
+        bal,
+        bookingsModel.balancesByBookingId[b.id]?.paymentStatus || b.payment_status,
+      ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bookings-export-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-  };
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `bookings_export_${bookingsModel.today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
-  if (loading) {
-    return (
-      <div className="space-y-6 animate-pulse max-w-7xl mx-auto">
-        <div className="h-10 bg-slate-200 rounded-lg w-1/4"></div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-20 bg-white border border-slate-200 rounded-xl"></div>
-          ))}
-        </div>
-        <div className="h-96 bg-white border border-slate-200 rounded-xl"></div>
-      </div>
-    );
-  }
+    showToast({ message: `Exported ${sortedBookings.length} bookings to CSV`, type: 'success' });
+  }, [sortedBookings, bookingsModel.balancesByBookingId, bookingsModel.today, showToast]);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      updateQueryParam('order', sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      updateQueryParam('sort', key);
+      updateQueryParam('order', 'asc');
+    }
+  };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-4 pb-8">
       {/* 1. Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Bookings & Reservations
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            {propertyFilter
-              ? 'Manage room reservations, check-ins, and unit folios for the selected property.'
-              : 'Master reservation workspace across all properties in your portfolio.'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <Link
-            to="/app/bookings/new"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-all shadow-xs cursor-pointer"
+      <PageHeader
+        title="Bookings"
+        scopeLabel={
+          bookingsModel.activeProperty
+            ? bookingsModel.activeProperty.name
+            : `All properties · ${bookingsModel.properties.length}`
+        }
+        subtitle={
+          bookingsModel.activeProperty
+            ? `Reservations and room allocations at ${bookingsModel.activeProperty.name}`
+            : 'Reservations, stays, and availability across your portfolio'
+        }
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => navigate('/app/bookings/new')}
+            icon={<Plus className="w-4 h-4" />}
           >
-            <Plus size={15} />
-            <span>New Booking</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* 2. Top Summary Metrics Bar */}
-      <BookingMetricsBar
-        totalCount={bookings.length}
-        inHouseCount={inHouseCount}
-        arrivalsTodayCount={arrivalsTodayCount}
-        departuresTodayCount={departuresTodayCount}
-        outstandingBalance={outstandingBalance}
+            New booking
+          </Button>
+        }
       />
 
-      {/* 3. Toolbar (Search, View Switcher: List/Calendar/Analytics, Filters) */}
+      {/* 2. StatStrip with quick-filter clickable cells */}
+      <BookingMetricsBar
+        arrivingTodayCount={bookingsModel.stats.arrivingTodayCount}
+        inHouseCount={bookingsModel.stats.inHouseCount}
+        departingTodayCount={bookingsModel.stats.departingTodayCount}
+        totalOutstanding={bookingsModel.stats.totalOutstanding}
+        balanceBookingsCount={bookingsModel.stats.balanceBookingsCount}
+        activeStageFilter={stageFilter}
+        onSelectStage={(st) => updateQueryParam('stage', st)}
+      />
+
+      {/* 3. Toolbar (View Switcher, Filters, CSV Export) */}
       <BookingToolbar
-        searchTerm={search}
-        onSearchChange={setSearch}
+        searchTerm={searchTerm}
+        onSearchChange={(val) => updateQueryParam('q', val)}
         activeView={activeView}
-        onViewChange={handleViewChange}
+        onViewChange={(v) => updateQueryParam('view', v)}
+        stageFilter={stageFilter}
+        onStageFilterChange={(val) => updateQueryParam('stage', val)}
         statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
+        onStatusFilterChange={(val) => updateQueryParam('status', val)}
         paymentFilter={paymentFilter}
-        onPaymentFilterChange={setPaymentFilter}
+        onPaymentFilterChange={(val) => updateQueryParam('pay', val)}
         onExport={handleExportCSV}
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
+        totalFilteredCount={sortedBookings.length}
       />
 
-      {/* 4. Active View Content */}
+      {/* 4. Active View */}
       {activeView === 'list' && (
         <BookingTableView
-          bookings={filteredBookings}
-          paymentsByBooking={paymentsByBooking}
+          bookings={paginatedBookings}
+          balancesByBookingId={bookingsModel.balancesByBookingId}
+          scopeIsAll={bookingsModel.scopeIsAll}
+          today={bookingsModel.today}
+          onCheckIn={bookingsModel.checkIn}
+          onCheckOut={bookingsModel.checkOut}
+          onAddPayment={(b) => setPaymentModalBooking(b)}
+          sortKey={sortKey}
+          sortOrder={sortOrder}
+          onSort={handleSort}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={(p) => updateQueryParam('page', String(p))}
+          onPageSizeChange={(sz) => setPageSize(sz)}
+          onClearFilters={handleClearFilters}
+          hasFilters={hasActiveFilters}
         />
       )}
 
       {activeView === 'calendar' && (
         <HotelCalendarView
-          bookings={bookings}
-          properties={properties}
-          selectedPropertyId={propertyFilter || undefined}
+          bookings={filteredBookings}
+          properties={bookingsModel.properties}
+          units={bookingsModel.units}
+          blocks={bookingsModel.blocks}
+          balancesByBookingId={bookingsModel.balancesByBookingId}
+          selectedPropertyId={bookingsModel.activeProperty?.id}
+          searchFilter={searchTerm}
+          onCheckIn={bookingsModel.checkIn}
+          onCheckOut={bookingsModel.checkOut}
+          onAddPayment={(b) => setPaymentModalBooking(b)}
         />
       )}
 
       {activeView === 'analytics' && (
-        <BookingAnalyticsView bookings={bookings} />
+        <BookingAnalyticsView bookings={filteredBookings} />
+      )}
+
+      {/* Quick Add Payment Modal */}
+      {paymentModalBooking && (
+        <AddPaymentModal
+          isOpen={!!paymentModalBooking}
+          onClose={() => setPaymentModalBooking(null)}
+          booking={paymentModalBooking}
+          balanceDue={bookingsModel.balancesByBookingId[paymentModalBooking.id]?.balanceDue || 0}
+          onSuccess={async () => {
+            setPaymentModalBooking(null);
+            showToast({ message: 'Payment recorded successfully', type: 'success' });
+          }}
+        />
       )}
     </div>
   );

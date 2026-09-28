@@ -1,131 +1,373 @@
-import React, { useEffect, useState } from 'react';
-import { repository } from '../../lib/repository';
-import { Plus, Building, MapPin, Phone, Mail, MoreVertical } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Building2, MapPin, Phone, Mail, Bed, Wrench, X, Check } from 'lucide-react';
+import { useWorkspaceData } from '../../context/WorkspaceDataContext';
+import { Property, Unit } from '../../lib/repository/types';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
+import { Input, Select } from '../../components/ui/FormControls';
+import { Drawer } from '../../components/ui/Drawer';
+import { StatStrip, StatCell } from '../../components/ui/StatStrip';
+import { useToast } from '../../components/ui/Toast';
 import PropertyModal from './PropertyModal';
 
 export default function PropertiesList() {
-  const [properties, setProperties] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
+  const { data, createUnit, updateUnit, createUnitBlock, deleteUnitBlock, refetch } = useWorkspaceData();
+  const { showToast } = useToast();
 
-  async function load() {
-    setLoading(true);
-    const docs = await repository.getProperties();
-    setProperties(docs);
-    setLoading(false);
-  }
+  const [showAddProperty, setShowAddProperty] = useState(false);
+  const [selectedPropForUnits, setSelectedPropForUnits] = useState<Property | null>(null);
 
-  useEffect(() => {
-    load();
-  }, []);
+  // Unit creation state
+  const [newUnitNumber, setNewUnitNumber] = useState('');
+  const [newUnitType, setNewUnitType] = useState('Standard Room');
+  const [newUnitFloor, setNewUnitFloor] = useState('Floor 1');
+  const [addingUnit, setAddingUnit] = useState(false);
 
-  async function handleToggleStatus(id: string, current: boolean) {
-    if (confirm(`Are you sure you want to ${current ? 'deactivate' : 'activate'} this property?`)) {
-      await repository.updateProperty(id, { active: !current });
-      await load();
-      alert('Property status updated. To see it in the global filter, please reload the page.');
+  // Unit maintenance block state
+  const [blockUnitId, setBlockUnitId] = useState('');
+  const [blockStartDate, setBlockStartDate] = useState('');
+  const [blockEndDate, setBlockEndDate] = useState('');
+  const [blockReason, setBlockReason] = useState<'Maintenance' | 'Other'>('Maintenance');
+  const [blockNote, setBlockNote] = useState('');
+
+  const propertyUnits = useMemo(() => {
+    if (!selectedPropForUnits) return [];
+    return data.units.filter((u) => u.property_id === selectedPropForUnits.id);
+  }, [data.units, selectedPropForUnits]);
+
+  const propertyBlocks = useMemo(() => {
+    if (!selectedPropForUnits) return [];
+    return data.unit_blocks.filter((b) => b.property_id === selectedPropForUnits.id);
+  }, [data.unit_blocks, selectedPropForUnits]);
+
+  const handleAddUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPropForUnits || !newUnitNumber.trim()) return;
+    setAddingUnit(true);
+    try {
+      await createUnit({
+        property_id: selectedPropForUnits.id,
+        number: newUnitNumber.trim(),
+        unit_type: newUnitType,
+        floor: newUnitFloor,
+        status: 'active',
+      });
+      setNewUnitNumber('');
+      showToast({ message: `Room ${newUnitNumber} added successfully`, type: 'success' });
+    } catch {
+      showToast({ message: 'Failed to add room', type: 'error' });
+    } finally {
+      setAddingUnit(false);
     }
-  }
+  };
 
-  if (loading && properties.length === 0) {
-    return (
-      <div className="animate-pulse space-y-6">
-        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1,2,3].map(i => <div key={i} className="h-48 bg-white border border-gray-100 rounded-xl shadow-sm"></div>)}
-        </div>
-      </div>
-    );
-  }
+  const handleToggleUnitStatus = async (unit: Unit) => {
+    const nextStatus = unit.status === 'active' ? 'inactive' : 'active';
+    try {
+      await updateUnit(unit.id, { status: nextStatus });
+      showToast({ message: `Room ${unit.number} marked ${nextStatus}`, type: 'info' });
+    } catch {
+      showToast({ message: 'Failed to update room', type: 'error' });
+    }
+  };
+
+  const handleAddBlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPropForUnits || !blockUnitId || !blockStartDate || !blockEndDate) return;
+    try {
+      await createUnitBlock({
+        unit_id: blockUnitId,
+        property_id: selectedPropForUnits.id,
+        start_date: blockStartDate,
+        end_date: blockEndDate,
+        reason: blockReason,
+        note: blockNote || undefined,
+      });
+      setBlockUnitId('');
+      setBlockStartDate('');
+      setBlockEndDate('');
+      setBlockNote('');
+      showToast({ message: 'Maintenance block added', type: 'success' });
+    } catch {
+      showToast({ message: 'Failed to create block', type: 'error' });
+    }
+  };
+
+  const handleDeleteBlock = async (blockId: string) => {
+    try {
+      await deleteUnitBlock(blockId);
+      showToast({ message: 'Maintenance block removed', type: 'info' });
+    } catch {
+      showToast({ message: 'Failed to remove block', type: 'error' });
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Properties</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your portfolio of hotels, homestays, and resorts.</p>
-        </div>
-        <button 
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-          onClick={() => setShowAdd(true)}
-        >
-          <Plus size={16} /> Add Property
-        </button>
-      </div>
+    <div className="space-y-6 pb-12">
+      {/* 1. Header */}
+      <PageHeader
+        title="Properties & Room Units"
+        subtitle="Manage your hospitality properties, room categories, and maintenance schedules"
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => setShowAddProperty(true)}
+            icon={<Plus className="w-4 h-4" />}
+          >
+            Add property
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {properties.map(p => (
-          <div key={p.id} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all ${p.active ? 'border-gray-200 hover:border-gray-300' : 'border-gray-200 opacity-60 grayscale'}`}>
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                    <Building size={20} />
-                  </div>
+      {/* 2. Overview Strip */}
+      <StatStrip>
+        <StatCell
+          label="TOTAL PROPERTIES"
+          value={<span>{data.properties.length}</span>}
+          caption="Active hotels, resorts & homestays"
+        />
+        <StatCell
+          label="TOTAL CONFIGURED ROOMS"
+          value={<span>{data.units.length} units</span>}
+          caption={`${data.units.filter((u) => u.status === 'active').length} active available units`}
+        />
+        <StatCell
+          label="SCHEDULED MAINTENANCE"
+          value={<span>{data.unit_blocks.length}</span>}
+          caption="Active out-of-service blocks"
+        />
+      </StatStrip>
+
+      {/* 3. Properties Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {data.properties.map((p) => {
+          const propUnits = data.units.filter((u) => u.property_id === p.id && u.status !== 'inactive');
+          const propBlocks = data.unit_blocks.filter((b) => b.property_id === p.id);
+
+          return (
+            <div
+              key={p.id}
+              className="bg-white border border-[#E4E7EC] rounded-[8px] p-5 flex flex-col justify-between hover:border-[#CBD2DC] transition-colors"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
-                    <h3 className="text-base font-semibold text-gray-900">{p.name}</h3>
-                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded uppercase tracking-wider">{p.property_type}</span>
+                    <h3 className="font-semibold text-base text-[#0E1726]">{p.name}</h3>
+                    <div className="text-xs text-[#64748B]">
+                      {p.property_type} · {p.city}, {p.state}
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 text-xs font-medium rounded-[4px] bg-[#EAF4F1] text-[#0D5C4D]">
+                    {propUnits.length} rooms
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-[#64748B] pt-2 border-t border-[#E4E7EC]">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-[#94A3B8] shrink-0" />
+                    <span className="truncate">{p.address || p.location}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-[#94A3B8] shrink-0" />
+                    <span>{p.phone || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-1 text-[#64748B]">
+                    <span>Check-in: {p.check_in_time || '14:00'}</span>
+                    <span>Check-out: {p.check_out_time || '11:00'}</span>
                   </div>
                 </div>
-                <div className="relative group">
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                    <MoreVertical size={16} />
-                  </button>
-                  <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-100 py-1 hidden group-hover:block z-10">
-                    <button 
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      onClick={() => handleToggleStatus(p.id, p.active)}
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-[#E4E7EC] flex items-center justify-between">
+                <span className="text-xs text-[#64748B]">
+                  {propBlocks.length > 0 ? (
+                    <span className="text-[#B45309] font-medium">{propBlocks.length} maintenance</span>
+                  ) : (
+                    'All units operational'
+                  )}
+                </span>
+
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setSelectedPropForUnits(p)}
+                  icon={<Bed className="w-3.5 h-3.5" />}
+                >
+                  Manage rooms ({propUnits.length})
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 4. Property Units Management Drawer */}
+      {selectedPropForUnits && (
+        <Drawer
+          isOpen={!!selectedPropForUnits}
+          onClose={() => setSelectedPropForUnits(null)}
+          title={`Rooms at ${selectedPropForUnits.name}`}
+          subtitle={`${propertyUnits.length} configured rooms · ${propertyBlocks.length} maintenance blocks`}
+          width="560px"
+        >
+          {/* Quick Add Unit Form */}
+          <form onSubmit={handleAddUnit} className="p-4 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[8px] space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#0E1726]">
+              + Add Room / Bed
+            </h4>
+            <div className="grid grid-cols-3 gap-2">
+              <Input
+                placeholder="Room # (e.g. 105)"
+                value={newUnitNumber}
+                onChange={(e) => setNewUnitNumber(e.target.value)}
+                required
+              />
+              <Select
+                value={newUnitType}
+                onChange={(e) => setNewUnitType(e.target.value)}
+              >
+                <option value="Standard Room">Standard Room</option>
+                <option value="Deluxe Room">Deluxe Room</option>
+                <option value="Executive Suite">Executive Suite</option>
+                <option value="Cottage Villa">Cottage Villa</option>
+                <option value="Dorm Bed">Dorm Bed</option>
+              </Select>
+              <Input
+                placeholder="Floor (Floor 1)"
+                value={newUnitFloor}
+                onChange={(e) => setNewUnitFloor(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" variant="primary" type="submit" loading={addingUnit}>
+                Add Unit
+              </Button>
+            </div>
+          </form>
+
+          {/* Units List */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+              Units Directory ({propertyUnits.length})
+            </h4>
+            <div className="divide-y divide-[#E4E7EC] border border-[#E4E7EC] rounded-[8px] overflow-hidden max-h-64 overflow-y-auto">
+              {propertyUnits.map((u) => (
+                <div key={u.id} className="p-2.5 px-3 bg-white flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-sm text-[#0E1726]">Room {u.number}</span>
+                    <span className="text-[#64748B] ml-2">
+                      {u.unit_type} {u.floor ? `· ${u.floor}` : ''}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-1.5 py-0.5 text-[11px] font-medium rounded ${
+                        u.status === 'active' ? 'bg-[#EAF4F1] text-[#0D5C4D]' : 'bg-[#FEF3F2] text-[#B42318]'
+                      }`}
                     >
-                      {p.active ? 'Deactivate' : 'Activate'}
+                      {u.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleUnitStatus(u)}
+                      className="text-[11px] text-[#64748B] hover:text-[#0E1726] underline cursor-pointer"
+                    >
+                      {u.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
                 </div>
-              </div>
-
-              <div className="space-y-2 mb-6">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <MapPin size={14} className="text-gray-400" />
-                  <span className="truncate">{p.location}, {p.city}</span>
-                </div>
-                {(p.phone || p.email) && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Phone size={14} className="text-gray-400" />
-                    <span>{p.phone}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${p.active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-                {p.active ? 'Active' : 'Inactive'}
-              </span>
-              {/* Could link to a specific property dashboard in the future */}
-              <button className="text-sm font-medium text-indigo-600 hover:text-indigo-700">View details</button>
+              ))}
             </div>
           </div>
-        ))}
-        {properties.length === 0 && (
-          <div className="col-span-full py-12 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-center">
-            <Building size={32} className="text-gray-400 mb-3" />
-            <h3 className="text-sm font-medium text-gray-900">No properties added</h3>
-            <p className="text-sm text-gray-500 mt-1">Get started by adding your first hotel or homestay.</p>
-            <button 
-              className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              onClick={() => setShowAdd(true)}
-            >
-              <Plus size={16} /> Add Property
-            </button>
-          </div>
-        )}
-      </div>
 
-      {showAdd && (
-        <PropertyModal 
-          onClose={() => setShowAdd(false)}
+          {/* Maintenance Blocks */}
+          <div className="space-y-3 pt-3 border-t border-[#E4E7EC]">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#64748B] flex items-center gap-1.5">
+              <Wrench className="w-3.5 h-3.5" />
+              <span>Schedule Maintenance Block</span>
+            </h4>
+
+            <form onSubmit={handleAddBlock} className="p-3 border border-[#E4E7EC] rounded-[6px] space-y-2.5 text-xs">
+              <div className="grid grid-cols-3 gap-2">
+                <Select
+                  value={blockUnitId}
+                  onChange={(e) => setBlockUnitId(e.target.value)}
+                  required
+                >
+                  <option value="">Select Room</option>
+                  {propertyUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      Room {u.number}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  type="date"
+                  value={blockStartDate}
+                  onChange={(e) => setBlockStartDate(e.target.value)}
+                  required
+                />
+                <Input
+                  type="date"
+                  value={blockEndDate}
+                  onChange={(e) => setBlockEndDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <Input
+                placeholder="Reason / Note (e.g. AC Filter inspection, Painting)"
+                value={blockNote}
+                onChange={(e) => setBlockNote(e.target.value)}
+              />
+
+              <div className="flex justify-end">
+                <Button size="sm" variant="secondary" type="submit">
+                  Add Block
+                </Button>
+              </div>
+            </form>
+
+            {propertyBlocks.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-medium text-[#64748B]">Active blocks:</div>
+                {propertyBlocks.map((blk) => {
+                  const u = propertyUnits.find((unit) => unit.id === blk.unit_id);
+                  return (
+                    <div
+                      key={blk.id}
+                      className="p-2 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[4px] flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <strong>Room {u?.number || '—'}</strong>: {blk.note || blk.reason}
+                        <div className="text-[11px] text-[#64748B]">
+                          {blk.start_date} to {blk.end_date}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBlock(blk.id)}
+                        className="text-xs text-[#B42318] hover:underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Drawer>
+      )}
+
+      {/* Add Property Modal */}
+      {showAddProperty && (
+        <PropertyModal
+          onClose={() => setShowAddProperty(false)}
           onComplete={() => {
-            setShowAdd(false);
-            load();
-            alert('Property added successfully! To see it in the top navigation, please reload the page.');
+            setShowAddProperty(false);
+            refetch();
           }}
         />
       )}

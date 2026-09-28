@@ -1,45 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { repository } from '../../lib/repository';
-import { generateId, fmtINR } from '../../lib/utils/formatters';
-import { generatePaymentReceiptPDF } from '../../lib/services/pdfGenerator';
-import { X, CheckCircle, Download, FileText, Mail, MessageCircle, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, CheckCircle, Download, FileText, AlertCircle } from 'lucide-react';
+import { useWorkspaceData } from '../../context/WorkspaceDataContext';
+import { Booking } from '../../lib/repository/types';
+import { Money } from '../../components/ui/Typography';
+import { Button } from '../../components/ui/Button';
+import { Input, Select } from '../../components/ui/FormControls';
+import { useToast } from '../../components/ui/Toast';
 
-export default function AddPaymentModal({ 
-  booking, 
-  balanceDue, 
-  onClose, 
-  onSuccess 
-}: { 
-  booking: any, 
-  balanceDue: number, 
-  onClose: () => void, 
-  onSuccess: () => void 
-}) {
+interface AddPaymentModalProps {
+  booking: Booking;
+  balanceDue: number;
+  onClose: () => void;
+  onSuccess: () => void;
+  isOpen?: boolean;
+}
+
+export default function AddPaymentModal({
+  booking,
+  balanceDue,
+  onClose,
+  onSuccess,
+  isOpen = true,
+}: AddPaymentModalProps) {
+  const { addPayment, data } = useWorkspaceData();
+  const { showToast } = useToast();
+
   const [amount, setAmount] = useState<number | ''>(balanceDue);
   const [method, setMethod] = useState('Google Pay');
   const [refId, setRefId] = useState('');
   const [purpose, setPurpose] = useState('Payment');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successData, setSuccessData] = useState<any>(null);
-  const [settings, setSettings] = useState<any>(null);
-  const [previouslyPaid, setPreviouslyPaid] = useState<number>(0);
+  const [successData, setSuccessData] = useState<{
+    amount: number;
+    newBalance: number;
+    paymentNo: string;
+  } | null>(null);
 
-  useEffect(() => {
-    repository.getSettings().then(setSettings);
-    repository.getPayments(booking.id).then(payments => {
-        const total = payments.reduce((sum, p) => {
-            if (p.status === 'Completed' || p.status === 'Recorded') return sum + Number(p.amount);
-            if (p.status === 'Refunded') return sum - Number(p.amount);
-            return sum;
-        }, 0);
-        setPreviouslyPaid(total);
-    });
-  }, [booking.id]);
+  if (!isOpen) return null;
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
@@ -48,243 +50,233 @@ export default function AddPaymentModal({
     try {
       const numAmount = Number(amount);
       if (numAmount <= 0) throw new Error('Enter an amount greater than ₹0.');
-      if (numAmount > balanceDue) throw new Error(`You can record up to ${fmtINR(balanceDue)} because that is the remaining amount due.`);
-      
-      const payment = await repository.createPayment({
-        payment_no: generateId('REC-'),
+      if (numAmount > balanceDue) {
+        throw new Error(`You can record up to ₹${balanceDue.toLocaleString('en-IN')} as that is the balance due.`);
+      }
+
+      const created = await addPayment({
+        payment_no: 'PAY-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
         booking_id: booking.id,
         date,
         amount: numAmount,
         method,
         purpose,
-        ref_id: refId,
-        status: 'Recorded'
+        ref_id: refId || undefined,
+        status: 'Recorded',
       });
 
-      const newBalance = balanceDue - numAmount;
-      const paymentStatus = newBalance <= 0 ? 'Paid' : 'Partially Paid';
-      
-      await repository.updateBooking(booking.id, { payment_status: paymentStatus });
-      setSuccessData({ payment, numAmount, newBalance });
-    } catch (err: any) {
-      setError(err.message);
+      const newBal = Math.max(0, balanceDue - numAmount);
+      setSuccessData({
+        amount: numAmount,
+        newBalance: newBal,
+        paymentNo: created.payment_no,
+      });
+      showToast({ message: 'Payment recorded and folio updated', type: 'success' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to record payment');
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleDownloadPDF() {
-    if (!successData || !settings) return;
-    try {
-      const doc = await generatePaymentReceiptPDF(
-        booking,
-        successData.payment,
-        booking.property,
-        booking.customer,
-        settings,
-        previouslyPaid,
-        successData.newBalance
-      );
-      doc.save(`${successData.payment.payment_no}.pdf`);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to generate PDF");
-    }
-  }
-
-  const handleDemoSend = (channel: string) => {
-    alert(`Demo: Sent\nPayment receipt shared via ${channel}.`);
   };
 
-  if (successData) {
-    return (
-      <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-          <div className="flex flex-col items-center pt-8 pb-6 px-6">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle size={32} className="text-green-600" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Payment Recorded</h2>
-            <p className="text-sm text-gray-500 mb-2">
-              {successData.newBalance > 0 
-                ? `${fmtINR(successData.newBalance)} remains due.` 
-                : 'This booking is now fully paid.'}
-            </p>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-gray-900 my-2">{fmtINR(successData.numAmount)}</div>
-              <div className="text-sm text-gray-500">received via {successData.payment.method}</div>
-              {successData.payment.ref_id && (
-                <div className="text-xs text-gray-400 mt-1">Ref: {successData.payment.ref_id}</div>
-              )}
-            </div>
-          </div>
-          
-          <div className="px-6 py-4 bg-gray-50 border-y border-gray-100">
-            <div className="flex justify-between items-center text-sm mb-2">
-              <span className="text-gray-500">Booking Total</span>
-              <span className="font-medium text-gray-900">{fmtINR(booking.grand_total)}</span>
-            </div>
-            <div className="flex justify-between items-center text-sm mb-2">
-              <span className="text-gray-500">Total Paid</span>
-              <span className="font-medium text-gray-900">{fmtINR(booking.grand_total - successData.newBalance)}</span>
-            </div>
-            <div className="flex justify-between items-center border-t border-gray-200 pt-2 mt-2">
-              <span className="text-gray-600 font-medium">Amount Due</span>
-              <span className={`font-bold ${successData.newBalance > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                {fmtINR(successData.newBalance)}
-              </span>
-            </div>
-          </div>
-          
-          <div className="p-6 grid grid-cols-2 gap-3">
-            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={handleDownloadPDF}>
-              <Download size={16} className="text-gray-400" /> Download PDF
-            </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={async () => {
-              if(!settings) return;
-              try {
-                const doc = await generatePaymentReceiptPDF(booking, successData.payment, booking.property, booking.customer, settings, previouslyPaid, successData.newBalance);
-                window.open(URL.createObjectURL(doc.output('blob')));
-              } catch(err) { console.error(err); }
-            }}>
-              <FileText size={16} className="text-gray-400" /> View Receipt
-            </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => handleDemoSend('Email')}>
-              <Mail size={16} className="text-gray-400" /> Email
-            </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => handleDemoSend('WhatsApp')}>
-              <MessageCircle size={16} className="text-gray-400" /> WhatsApp
-            </button>
-            <button className="col-span-2 mt-2 w-full py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors" onClick={onSuccess}>
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleDownloadReceipt = async () => {
+    try {
+      const { generatePaymentReceiptPDF } = await import('../../lib/services/pdfGenerator');
+      const doc = await generatePaymentReceiptPDF(
+        booking,
+        {
+          id: 'pay-temp',
+          payment_no: successData?.paymentNo || 'PAY-REC',
+          booking_id: booking.id,
+          date,
+          amount: successData?.amount || 0,
+          method,
+          status: 'Recorded',
+          created_at: new Date().toISOString(),
+        },
+        booking.property,
+        booking.customer,
+        data.settings,
+        booking.grand_total - balanceDue,
+        successData?.newBalance || 0
+      );
+      doc.save(`REC-${successData?.paymentNo}.pdf`);
+      showToast({ message: 'Receipt downloaded', type: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Failed to generate receipt PDF', type: 'error' });
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white">
-          <h2 className="text-lg font-bold text-gray-900">Record Payment</h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
-            <X size={20} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[1px]"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) onClose();
+      }}
+    >
+      <div className="w-full max-w-md bg-white border border-[#E4E7EC] rounded-[8px] shadow-[0_8px_24px_rgba(14,23,38,0.16)] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="h-14 px-5 border-b border-[#E4E7EC] flex items-center justify-between shrink-0 bg-white">
+          <h2 className="text-base font-semibold text-[#0E1726]">Record payment</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-[#64748B] hover:text-[#0E1726] rounded-[4px] cursor-pointer"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4 flex justify-between items-center">
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Booking {booking.booking_no}</div>
-              <div className="text-sm font-medium text-gray-900">Total: {fmtINR(booking.grand_total)}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs font-medium text-gray-500 mb-1">Amount Due</div>
-              <div className="text-lg font-bold text-gray-900">{fmtINR(balanceDue)}</div>
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-              <input 
-                type="number" 
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none transition-shadow"
-                value={amount} 
-                onChange={e => setAmount(Number(e.target.value) || '')} 
-                required 
-                max={balanceDue} 
-                step="0.01" 
-                autoFocus
-              />
+        {successData ? (
+          <div className="p-6 space-y-5 text-center">
+            <div className="w-12 h-12 bg-[#EAF4F1] text-[#0D5C4D] rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle className="w-6 h-6" />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-              <select 
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none transition-shadow bg-white"
-                value={method} 
-                onChange={e => setMethod(e.target.value)}
+              <h3 className="text-base font-semibold text-[#0E1726]">Payment recorded</h3>
+              <p className="text-xs text-[#64748B] mt-1">
+                {successData.newBalance > 0
+                  ? `₹${successData.newBalance.toLocaleString('en-IN')} remains outstanding.`
+                  : 'This reservation is now fully settled.'}
+              </p>
+            </div>
+
+            <div className="p-3 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[6px] text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-[#64748B]">Amount received:</span>
+                <span className="font-semibold text-[#067647] tabular-nums">
+                  <Money amount={successData.amount} />
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#64748B]">Method:</span>
+                <span className="font-medium text-[#0E1726]">{method}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-[#E4E7EC]">
+                <span className="text-[#64748B]">Remaining due:</span>
+                <span className="font-semibold text-[#0E1726] tabular-nums">
+                  <Money amount={successData.newBalance} />
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleDownloadReceipt}
+                icon={<Download className="w-3.5 h-3.5" />}
               >
-                <option>Google Pay</option>
-                <option>PhonePe</option>
-                <option>Paytm</option>
-                <option>WhatsApp Pay</option>
-                <option>UPI</option>
-                <option>Bank Transfer</option>
-                <option>Cash</option>
-                <option>Credit Card</option>
-                <option>Debit Card</option>
-              </select>
+                Receipt PDF
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  onSuccess();
+                  onClose();
+                }}
+              >
+                Done
+              </Button>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Transaction / Reference ID <span className="text-gray-400 font-normal">(Optional)</span>
-              </label>
-              <input 
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none transition-shadow"
-                value={refId} 
-                onChange={e => setRefId(e.target.value)}
-                placeholder="e.g. UTR number, Receipt number"
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {/* Booking balance snapshot */}
+            <div className="p-3 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[6px] flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[#64748B] block">Booking {booking.booking_no}</span>
+                <span className="font-medium text-[#0E1726]">
+                  {booking.customer?.name || 'Guest'}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[#64748B] block">Current Balance</span>
+                <span className="font-semibold text-sm text-[#B45309] tabular-nums">
+                  <Money amount={balanceDue} />
+                </span>
+              </div>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-[#FEF3F2] border border-[#FDA29B] rounded-[6px] text-xs text-[#B42318] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <Input
+              type="number"
+              step="any"
+              min={1}
+              max={balanceDue}
+              label="Amount to collect (₹) *"
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              required
+            />
+
+            <Select
+              label="Payment Method"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              className="w-full"
+            >
+              <option value="Google Pay">Google Pay</option>
+              <option value="PhonePe">PhonePe</option>
+              <option value="Paytm">Paytm</option>
+              <option value="UPI">UPI / QR</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Debit Card">Debit Card</option>
+              <option value="Bank Transfer">Bank Transfer / NEFT</option>
+              <option value="Cash">Cash</option>
+            </Select>
+
+            <Input
+              label="Transaction / Reference ID (optional)"
+              placeholder="e.g. UTR / UPI / Receipt #"
+              value={refId}
+              onChange={(e) => setRefId(e.target.value)}
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Purpose"
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+                className="w-full"
+              >
+                <option value="Advance">Advance deposit</option>
+                <option value="During stay">Mid-stay folio</option>
+                <option value="Final payment">Final checkout payment</option>
+                <option value="Payment">Payment</option>
+              </Select>
+
+              <Input
+                type="date"
+                label="Date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Purpose</label>
-                <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none transition-shadow bg-white"
-                  value={purpose} 
-                  onChange={e => setPurpose(e.target.value)}
-                >
-                  <option value="Advance">Advance</option>
-                  <option value="During stay">During stay</option>
-                  <option value="Final payment">Final payment</option>
-                  <option value="Payment">Other Payment</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
-                <input 
-                  type="date" 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none transition-shadow"
-                  value={date} 
-                  onChange={e => setDate(e.target.value)} 
-                  required 
-                />
-              </div>
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E4E7EC]">
+              <Button variant="secondary" type="button" onClick={onClose} disabled={loading}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" loading={loading}>
+                Record payment
+              </Button>
             </div>
-          </div>
-
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2 text-red-700 text-sm">
-              <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-          
-          <div className="mt-8 flex gap-3">
-            <button 
-              type="button" 
-              className="flex-1 py-2.5 px-4 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-              onClick={onClose} 
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="flex-1 py-2.5 px-4 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-              disabled={loading}
-            >
-              {loading ? 'Processing...' : 'Record Payment'}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -51,7 +51,7 @@ export default function FinalCtaSection() {
               <Check size={14} className="text-emerald-400" /> Free to use
             </span>
             <span className="flex items-center gap-1.5">
-              <Check size={14} className="text-emerald-400" /> No credit card needed
+              <Check size={14} className="text-emerald-400" /> Free for every property
             </span>
             <span className="flex items-center gap-1.5">
               <Check size={14} className="text-emerald-400" /> Setup under 5 minutes

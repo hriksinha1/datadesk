@@ -1,28 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link, useOutletContext, useSearchParams } from 'react-router-dom';
-import { repository } from '../../lib/repository';
-import { generateId, fmtINR } from '../../lib/utils/formatters';
-import { AppContextType } from '../../components/layout/AppShell';
-import { ChevronRight, ArrowLeft, CheckCircle, UserPlus, Users, MapPin, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { ChevronRight, CheckCircle, ArrowLeft } from 'lucide-react';
+import { useWorkspaceData } from '../../context/WorkspaceDataContext';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
+import { Input, Select } from '../../components/ui/FormControls';
+import { Money } from '../../components/ui/Typography';
+import { generateId } from '../../lib/utils/formatters';
+import { isBookingOverlapping } from '../../lib/analytics';
+import { useToast } from '../../components/ui/Toast';
 
 export default function NewBooking() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { propertyFilter } = useOutletContext<AppContextType>();
+  const { showToast } = useToast();
+  const { data, createBooking, addPayment, createCustomer } = useWorkspaceData();
 
   const qDate = searchParams.get('date');
   const qRoom = searchParams.get('room');
   const qProp = searchParams.get('prop');
-  
-  const [properties, setProperties] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const qUnit = searchParams.get('unit');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState(1);
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
 
-  // Step 1: Stay
-  const [propertyId, setPropertyId] = useState(qProp || propertyFilter);
+  // Step 1: Stay & Unit
+  const [propertyId, setPropertyId] = useState(qProp || (data.properties[0]?.id || ''));
   const [checkIn, setCheckIn] = useState(qDate || '');
   const [checkOut, setCheckOut] = useState(() => {
     if (qDate) {
@@ -32,86 +37,110 @@ export default function NewBooking() {
     }
     return '';
   });
-  const [rooms, setRooms] = useState(1);
-  const [guests, setGuests] = useState(2);
-  const [roomType, setRoomType] = useState('Standard');
+  const [selectedUnitId, setSelectedUnitId] = useState(qUnit || '');
+  const [roomType, setRoomType] = useState('Standard Room');
   const [roomNumber, setRoomNumber] = useState(qRoom || '');
-  const [nights, setNights] = useState(0);
+  const [guests, setGuests] = useState(2);
+  const [notes, setNotes] = useState('');
 
-  // Step 2: Customer
-  const [newCustomer, setNewCustomer] = useState(false);
+  // Units for selected property
+  const availableUnits = useMemo(() => {
+    return data.units.filter((u) => u.property_id === propertyId && u.status !== 'inactive');
+  }, [data.units, propertyId]);
+
+  // Sync unit selection
+  useEffect(() => {
+    if (selectedUnitId) {
+      const u = availableUnits.find((unit) => unit.id === selectedUnitId);
+      if (u) {
+        setRoomNumber(u.number);
+        setRoomType(u.unit_type);
+      }
+    }
+  }, [selectedUnitId, availableUnits]);
+
+  // Step 2: Guest
+  const [isNewGuest, setIsNewGuest] = useState(false);
   const [customerId, setCustomerId] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
 
   // Step 3: Pricing
-  const [baseAmount, setBaseAmount] = useState<number | ''>('');
-  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [baseAmount, setBaseAmount] = useState<number | ''>(5000);
+  const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState(12);
-  const [discount, setDiscount] = useState<number | ''>(0);
 
-  // Step 4: Payment
-  const [paymentType, setPaymentType] = useState('No payment'); // 'No payment', 'Advance payment', 'Full payment'
-  const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
-  const [paymentMethod, setPaymentMethod] = useState('Google Pay');
+  // Step 4: Advance / Payment
+  const [paymentType, setPaymentType] = useState<'none' | 'advance' | 'full'>('advance');
+  const [paymentAmount, setPaymentAmount] = useState<number | ''>(2500);
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [paymentRef, setPaymentRef] = useState('');
 
-  useEffect(() => {
-    Promise.all([repository.getProperties(), repository.getCustomers()]).then(([pRes, cRes]) => {
-      const activeProps = pRes.filter(p => p.active);
-      setProperties(activeProps);
-      setCustomers(cRes);
-      if (!propertyId && activeProps.length > 0) {
-        setPropertyId(activeProps[0].id);
-      }
-    });
-  }, [propertyId]);
-
-  useEffect(() => {
-    if (checkIn && checkOut) {
-      const d1 = new Date(checkIn);
-      const d2 = new Date(checkOut);
-      const diffTime = Math.abs(d2.getTime() - d1.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      setNights(diffDays);
-    } else {
-      setNights(0);
-    }
+  // Calculate nights
+  const nights = useMemo(() => {
+    if (!checkIn || !checkOut) return 0;
+    const d1 = new Date(checkIn).getTime();
+    const d2 = new Date(checkOut).getTime();
+    const diff = d2 - d1;
+    return Math.max(0, Math.ceil(diff / (1000 * 3600 * 24)));
   }, [checkIn, checkOut]);
 
-  // Derived Calculations
+  // Grand total calculation
   const numBase = Number(baseAmount) || 0;
-  const numDiscount = Number(discount) || 0;
-  const subtotal = numBase - numDiscount;
-  const taxAmount = taxEnabled ? subtotal * (taxRate / 100) : 0;
-  const grandTotal = subtotal + taxAmount;
-  
+  const taxAmount = taxEnabled ? Math.round(numBase * (taxRate / 100)) : 0;
+  const grandTotal = numBase + taxAmount;
+
+  // Auto-fill payment amount if 'full'
   useEffect(() => {
-    if (paymentType === 'Full payment') {
-        setPaymentAmount(grandTotal);
-    } else if (paymentType === 'No payment') {
-        setPaymentAmount('');
+    if (paymentType === 'full') {
+      setPaymentAmount(grandTotal);
+    } else if (paymentType === 'none') {
+      setPaymentAmount(0);
     }
   }, [paymentType, grandTotal]);
 
   const numPayment = Number(paymentAmount) || 0;
-  const balanceDue = grandTotal - numPayment;
+  const balanceDue = Math.max(0, grandTotal - numPayment);
 
-  const handleNext = () => {
+  // Overlap verification helper
+  const checkConflicts = () => {
+    if (selectedUnitId && checkIn && checkOut) {
+      const res = isBookingOverlapping(
+        data.bookings,
+        data.unit_blocks,
+        selectedUnitId,
+        checkIn,
+        checkOut
+      );
+      if (res.hasConflict) {
+        return res.message;
+      }
+    }
+    return null;
+  };
+
+  const handleNextStep = () => {
     setError('');
+
     if (step === 1) {
       if (!propertyId || !checkIn || !checkOut || nights <= 0) {
-        setError('Please select property and valid dates.');
+        setError('Please choose valid stay dates (minimum 1 night).');
+        return;
+      }
+      const conflictMsg = checkConflicts();
+      if (conflictMsg) {
+        setError(conflictMsg);
         return;
       }
     } else if (step === 2) {
-      if (!newCustomer && !customerId) {
-        setError('Please select a guest.');
-        return;
-      }
-      if (newCustomer && (!customerName || !customerPhone)) {
-        setError('Name and phone are required for new guests.');
+      if (isNewGuest) {
+        if (!guestName.trim() || !guestPhone.trim()) {
+          setError('Guest name and phone number are required.');
+          return;
+        }
+      } else if (!customerId) {
+        setError('Please select a registered guest or switch to New Guest.');
         return;
       }
     } else if (step === 3) {
@@ -120,375 +149,407 @@ export default function NewBooking() {
         return;
       }
     }
-    setStep(s => s + 1);
+
+    setStep((s) => s + 1);
   };
 
-  async function handleSubmit() {
+  const handleSubmitBooking = async () => {
     if (loading) return;
     setLoading(true);
     setError('');
+
     try {
-      if (paymentType !== 'No payment' && numPayment <= 0) {
-        throw new Error('Payment amount must be greater than 0');
+      // Re-verify conflicts before final commit
+      const conflictMsg = checkConflicts();
+      if (conflictMsg) {
+        throw new Error(conflictMsg);
       }
 
       let finalCustomerId = customerId;
-      if (newCustomer) {
-        const nc = await repository.createCustomer({
-          name: customerName,
-          phone: customerPhone,
-          email: customerEmail
+      if (isNewGuest) {
+        const createdCust = await createCustomer({
+          name: guestName.trim(),
+          phone: guestPhone.trim(),
+          email: guestEmail.trim() || undefined,
         });
-        finalCustomerId = nc.id;
+        finalCustomerId = createdCust.id;
       }
 
       const bookingStatus = 'Confirmed';
-      const paymentStatus = balanceDue <= 0 ? 'Paid' : (numPayment > 0 ? 'Partially Paid' : 'Unpaid');
+      const paymentStatus = balanceDue <= 0 ? 'Paid' : numPayment > 0 ? 'Partially Paid' : 'Unpaid';
 
-      const newBooking = await repository.createBooking({
+      const newBooking = await createBooking({
         booking_no: generateId('BK-'),
         customer_id: finalCustomerId,
         property_id: propertyId,
+        unit_id: selectedUnitId || undefined,
         check_in: checkIn,
         check_out: checkOut,
         nights,
-        rooms,
+        rooms: 1,
         guests,
         room_type: roomType,
         room_number: roomNumber || undefined,
+        notes: notes || undefined,
         base_amount: numBase,
         tax_enabled: taxEnabled,
         tax_rate: taxEnabled ? taxRate : 0,
         tax_amount: taxAmount,
         grand_total: grandTotal,
         booking_status: bookingStatus,
-        payment_status: paymentStatus
+        payment_status: paymentStatus,
       });
 
-      if (paymentType !== 'No payment' && numPayment > 0) {
-        await repository.createPayment({
-          payment_no: generateId('REC-'),
+      // Record advance payment if specified
+      if (paymentType !== 'none' && numPayment > 0) {
+        await addPayment({
+          payment_no: generateId('PAY-'),
           booking_id: newBooking.id,
-          date: new Date().toISOString().split('T')[0],
+          date: checkIn <= todayISO() ? todayISO() : checkIn,
           amount: numPayment,
           method: paymentMethod,
-          purpose: paymentType === 'Advance payment' ? 'Advance' : 'Final payment',
-          ref_id: paymentRef,
-          status: 'Recorded'
+          ref_id: paymentRef || undefined,
+          purpose: paymentType === 'full' ? 'Full Prepayment' : 'Advance Deposit',
+          status: 'Recorded',
         });
       }
 
       setCreatedBookingId(newBooking.id);
-    } catch (err: any) {
-      setError(err.message);
+      showToast({ message: 'Reservation created successfully', type: 'success' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create booking');
+    } finally {
       setLoading(false);
     }
-  }
+  };
 
   if (createdBookingId) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 w-full max-w-md text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle size={32} className="text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed</h2>
-          <p className="text-gray-500 mb-8">The reservation has been created successfully.</p>
-          <div className="space-y-3">
-            <button className="w-full py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors" onClick={() => navigate(`/app/bookings/${createdBookingId}`)}>
-              View Booking Details
-            </button>
-            <button className="w-full py-2.5 bg-white text-gray-700 border border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors" onClick={() => navigate('/app/bookings')}>
-              Back to Bookings
-            </button>
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-4 text-center">
+        <div className="w-12 h-12 bg-[#EAF4F1] text-[#0D5C4D] rounded-full flex items-center justify-center mb-3">
+          <CheckCircle className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl font-semibold text-[#0E1726]">Reservation confirmed</h2>
+        <p className="text-xs sm:text-sm text-[#64748B] mt-1 max-w-sm">
+          The booking has been saved to the tape chart and operational dashboard.
+        </p>
+
+        <div className="mt-6 flex items-center gap-3">
+          <Button variant="secondary" onClick={() => navigate('/app/bookings')}>
+            View all bookings
+          </Button>
+          <Button variant="primary" onClick={() => navigate(`/app/bookings/${createdBookingId}`)}>
+            Open booking folio &rarr;
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-        <Link to="/app/bookings" className="hover:text-gray-900 transition-colors">Bookings</Link>
-        <ChevronRight size={14} />
-        <span className="text-gray-900 font-medium">New Booking</span>
+    <div className="max-w-2xl mx-auto space-y-6 pb-12">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-xs text-[#64748B]">
+        <Link to="/app/bookings" className="hover:text-[#0E1726]">
+          Bookings
+        </Link>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-[#0E1726] font-medium">New booking</span>
       </div>
 
-      <div className="flex items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Create Booking</h1>
+      <PageHeader
+        title="Create new reservation"
+        subtitle={`Step ${step} of 4: ${
+          step === 1 ? 'Stay details' : step === 2 ? 'Guest info' : step === 3 ? 'Folio & pricing' : 'Payment deposit'
+        }`}
+      />
+
+      {/* Step Indicator */}
+      <div className="flex items-center gap-2">
+        {[1, 2, 3, 4].map((s) => (
+          <div
+            key={s}
+            className={`flex-1 h-1.5 rounded-full transition-colors ${
+              s <= step ? 'bg-[#0D5C4D]' : 'bg-[#E4E7EC]'
+            }`}
+          />
+        ))}
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-1 space-y-6">
-          {/* Step 1 */}
-          <div className={`bg-white rounded-xl border transition-all ${step === 1 ? 'border-indigo-500 shadow-sm ring-1 ring-indigo-500' : 'border-gray-200 shadow-sm opacity-60'}`}>
-            <div className="px-5 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer" onClick={() => setStep(1)}>
-              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${step === 1 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>1</span>
-                Property & Stay
-              </h2>
-              {step > 1 && <span className="text-sm text-indigo-600 font-medium">Edit</span>}
-            </div>
-            {step === 1 && (
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <MapPin size={16} className="text-gray-400" />
-                    </div>
-                    <select className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm" value={propertyId} onChange={e => setPropertyId(e.target.value)}>
-                      {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Check-in</label>
-                    <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={checkIn} onChange={e => setCheckIn(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
-                    <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={checkOut} onChange={e => setCheckOut(e.target.value)} />
-                  </div>
-                </div>
-                {nights > 0 && <div className="text-sm text-gray-500 font-medium">{nights} night(s) selected</div>}
-                
-                <div className="grid grid-cols-4 gap-3 pt-2">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Rooms</label>
-                    <input type="number" min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 text-sm" value={rooms} onChange={e => setRooms(Number(e.target.value))} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Guests</label>
-                    <input type="number" min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 text-sm" value={guests} onChange={e => setGuests(Number(e.target.value))} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
-                    <select className="w-full px-2 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 bg-white text-xs sm:text-sm" value={roomType} onChange={e => setRoomType(e.target.value)}>
-                      <option value="Deluxe Room">Deluxe</option>
-                      <option value="Executive Suite">Suite</option>
-                      <option value="Standard Room">Standard</option>
-                      <option value="Cottage Villa">Cottage</option>
-                      <option value="Dorm Bed">Dorm Bed</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Room #</label>
-                    <input type="text" placeholder="e.g. 101" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-slate-900 focus:border-slate-900 text-sm" value={roomNumber} onChange={e => setRoomNumber(e.target.value)} />
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <button type="button" className="px-5 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer" onClick={handleNext}>Continue to Guest Info →</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Step 2 */}
-          <div className={`bg-white rounded-xl border transition-all ${step === 2 ? 'border-indigo-500 shadow-sm ring-1 ring-indigo-500' : 'border-gray-200 shadow-sm opacity-60'}`}>
-            <div className="px-5 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer" onClick={() => step > 1 && setStep(2)}>
-              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${step === 2 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>2</span>
-                Customer
-              </h2>
-              {step > 2 && <span className="text-sm text-indigo-600 font-medium">Edit</span>}
-            </div>
-            {step === 2 && (
-              <div className="p-5 space-y-4">
-                <div className="flex bg-gray-100 p-1 rounded-lg w-full max-w-sm mb-4">
-                  <button type="button" className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${!newCustomer ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setNewCustomer(false)}>Existing</button>
-                  <button type="button" className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${newCustomer ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setNewCustomer(true)}>New Guest</button>
-                </div>
-
-                {!newCustomer ? (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Guest</label>
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm" value={customerId} onChange={e => setCustomerId(e.target.value)}>
-                      <option value="">-- Select --</option>
-                      {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={customerName} onChange={e => setCustomerName(e.target.value)} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                        <input type="tel" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
-                        <input type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div className="pt-2">
-                  <button type="button" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors" onClick={handleNext}>Continue</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Step 3 */}
-          <div className={`bg-white rounded-xl border transition-all ${step === 3 ? 'border-indigo-500 shadow-sm ring-1 ring-indigo-500' : 'border-gray-200 shadow-sm opacity-60'}`}>
-            <div className="px-5 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer" onClick={() => step > 2 && setStep(3)}>
-              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${step === 3 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>3</span>
-                Pricing
-              </h2>
-              {step > 3 && <span className="text-sm text-indigo-600 font-medium">Edit</span>}
-            </div>
-            {step === 3 && (
-              <div className="p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Accommodation Charges (₹)</label>
-                    <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={baseAmount} onChange={e => setBaseAmount(Number(e.target.value) || '')} min="0" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Discount (₹) <span className="text-gray-400 font-normal">Optional</span></label>
-                    <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={discount} onChange={e => setDiscount(Number(e.target.value) || '')} min="0" />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 pt-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                    <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" checked={taxEnabled} onChange={e => setTaxEnabled(e.target.checked)} />
-                    Apply GST
-                  </label>
-                  {taxEnabled && (
-                    <select className="w-24 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm" value={taxRate} onChange={e => setTaxRate(Number(e.target.value))}>
-                      <option value={12}>12%</option>
-                      <option value={18}>18%</option>
-                      <option value={28}>28%</option>
-                    </select>
-                  )}
-                </div>
-                
-                <div className="pt-2">
-                  <button type="button" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors" onClick={handleNext}>Continue</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Step 4 */}
-          <div className={`bg-white rounded-xl border transition-all ${step === 4 ? 'border-indigo-500 shadow-sm ring-1 ring-indigo-500' : 'border-gray-200 shadow-sm opacity-60'}`}>
-            <div className="px-5 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer" onClick={() => step > 3 && setStep(4)}>
-              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${step === 4 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>4</span>
-                Payment
-              </h2>
-            </div>
-            {step === 4 && (
-              <div className="p-5 space-y-4">
-                <p className="text-sm text-gray-500 mb-2">Optional. You can record more payments later from this booking.</p>
-                <div className="flex bg-gray-100 p-1 rounded-lg w-full mb-4">
-                  {['No payment', 'Advance payment', 'Full payment'].map(t => (
-                    <button key={t} type="button" className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${paymentType === t ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setPaymentType(t)}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-
-                {paymentType !== 'No payment' && (
-                  <div className="space-y-4 pt-2">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-                        <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm bg-gray-50" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value) || '')} min="0" max={grandTotal} disabled={paymentType === 'Full payment'} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
-                        <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                          <option>Google Pay</option>
-                          <option>PhonePe</option>
-                          <option>Paytm</option>
-                          <option>WhatsApp Pay</option>
-                          <option>Cash</option>
-                          <option>Card</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Reference ID <span className="text-gray-400 font-normal">Optional</span></label>
-                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          {error && <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">{error}</div>}
+      {error && (
+        <div className="p-3 bg-[#FEF3F2] border border-[#FDA29B] rounded-[6px] text-xs text-[#B42318] font-medium">
+          {error}
         </div>
+      )}
 
-        {/* Right column: Summary */}
-        <div className="w-full lg:w-80 flex-shrink-0">
-          <div className="bg-gray-900 rounded-xl shadow-sm overflow-hidden text-white sticky top-24">
-            <div className="p-5 border-b border-gray-800">
-              <h2 className="text-base font-semibold">Booking Summary</h2>
+      {/* STEP 1: Stay Details */}
+      {step === 1 && (
+        <div className="bg-white border border-[#E4E7EC] rounded-[8px] p-6 space-y-4">
+          <h3 className="text-sm font-semibold text-[#0E1726]">Property & Stay Schedule</h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="Property"
+              value={propertyId}
+              onChange={(e) => setPropertyId(e.target.value)}
+              className="w-full"
+            >
+              {data.properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.city})
+                </option>
+              ))}
+            </Select>
+
+            <Select
+              label="Allocated Room / Unit"
+              value={selectedUnitId}
+              onChange={(e) => setSelectedUnitId(e.target.value)}
+              className="w-full"
+            >
+              <option value="">-- Choose available unit --</option>
+              {availableUnits.map((u) => (
+                <option key={u.id} value={u.id}>
+                  Room {u.number} · {u.unit_type}
+                </option>
+              ))}
+            </Select>
+
+            <Input
+              type="date"
+              label="Check-in Date"
+              value={checkIn}
+              onChange={(e) => setCheckIn(e.target.value)}
+            />
+
+            <Input
+              type="date"
+              label="Check-out Date"
+              value={checkOut}
+              onChange={(e) => setCheckOut(e.target.value)}
+            />
+
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              label="Number of Guests"
+              value={guests}
+              onChange={(e) => setGuests(Number(e.target.value))}
+            />
+
+            <div className="flex flex-col justify-end">
+              <div className="h-9 px-3 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[6px] flex items-center text-xs text-[#64748B]">
+                Stay duration:{' '}
+                <strong className="text-[#0E1726] ml-1">{nights} nights</strong>
+              </div>
             </div>
-            <div className="p-5 space-y-4">
-              <div className="space-y-1 pb-4 border-b border-gray-800">
-                <div className="text-sm text-gray-400">Property</div>
-                <div className="font-medium">{properties.find(p => p.id === propertyId)?.name || 'Not selected'}</div>
-              </div>
-              <div className="space-y-1 pb-4 border-b border-gray-800">
-                <div className="text-sm text-gray-400">Stay</div>
-                <div className="font-medium">{nights > 0 ? `${nights} nights, ${guests} guests` : 'Dates not set'}</div>
-                <div className="text-sm text-gray-300">{roomType} Room</div>
-              </div>
-              
-              <div className="pt-2 space-y-2">
-                <div className="flex justify-between text-sm text-gray-400">
-                  <span>Subtotal</span>
-                  <span>{fmtINR(subtotal)}</span>
-                </div>
-                {taxEnabled && (
-                  <div className="flex justify-between text-sm text-gray-400">
-                    <span>GST ({taxRate}%)</span>
-                    <span>{fmtINR(taxAmount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-800 mt-2">
-                  <span>Total Booking Amount</span>
-                  <span>{fmtINR(grandTotal)}</span>
-                </div>
-              </div>
+          </div>
 
-              {step === 4 && (
-                <div className="bg-gray-800 rounded-lg p-4 mt-4">
-                  <div className="flex justify-between text-sm mb-1 text-gray-300">
-                    <span>Payment</span>
-                    <span className="text-green-400">{fmtINR(numPayment)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold">
-                    <span>Due</span>
-                    <span className={balanceDue > 0 ? 'text-amber-400' : 'text-gray-400'}>{fmtINR(balanceDue)}</span>
-                  </div>
+          <div className="pt-2">
+            <Input
+              label="Special Requests / Notes"
+              placeholder="e.g. Airport pick-up, high floor, early arrival"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: Guest Details */}
+      {step === 2 && (
+        <div className="bg-white border border-[#E4E7EC] rounded-[8px] p-6 space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-[#E4E7EC]">
+            <h3 className="text-sm font-semibold text-[#0E1726]">Guest Information</h3>
+            <button
+              type="button"
+              onClick={() => setIsNewGuest(!isNewGuest)}
+              className="text-xs text-[#0D5C4D] font-medium hover:underline cursor-pointer"
+            >
+              {isNewGuest ? 'Select existing guest' : '+ Register new guest'}
+            </button>
+          </div>
+
+          {isNewGuest ? (
+            <div className="space-y-3">
+              <Input
+                label="Full Name *"
+                placeholder="e.g. Rahul Sharma"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+              />
+              <Input
+                label="Phone Number *"
+                placeholder="+91 98765 43210"
+                value={guestPhone}
+                onChange={(e) => setGuestPhone(e.target.value)}
+              />
+              <Input
+                type="email"
+                label="Email Address (optional)"
+                placeholder="rahul@example.com"
+                value={guestEmail}
+                onChange={(e) => setGuestEmail(e.target.value)}
+              />
+            </div>
+          ) : (
+            <div>
+              <Select
+                label="Select Existing Guest"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="w-full"
+              >
+                <option value="">-- Choose guest from directory --</option>
+                {data.customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.phone}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STEP 3: Pricing */}
+      {step === 3 && (
+        <div className="bg-white border border-[#E4E7EC] rounded-[8px] p-6 space-y-4">
+          <h3 className="text-sm font-semibold text-[#0E1726]">Folio & Accommodation Charges</h3>
+
+          <div className="space-y-4">
+            <Input
+              type="number"
+              label="Accommodation Charges (₹) *"
+              value={baseAmount}
+              onChange={(e) => setBaseAmount(Number(e.target.value))}
+            />
+
+            <div className="p-3 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[6px] space-y-2">
+              <label className="flex items-center gap-2 text-xs font-medium text-[#0E1726] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={taxEnabled}
+                  onChange={(e) => setTaxEnabled(e.target.checked)}
+                  className="rounded text-[#0D5C4D]"
+                />
+                <span>Apply GST / Tax</span>
+              </label>
+
+              {taxEnabled && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Select
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(Number(e.target.value))}
+                    className="w-36"
+                  >
+                    <option value={12}>12% GST</option>
+                    <option value={18}>18% GST</option>
+                    <option value={5}>5% GST</option>
+                    <option value={0}>0% Exempt</option>
+                  </Select>
+                  <span className="text-xs text-[#64748B]">
+                    Tax amount: <strong className="text-[#0E1726]">₹{taxAmount.toLocaleString('en-IN')}</strong>
+                  </span>
                 </div>
               )}
             </div>
-            
-            <div className="p-5 pt-0">
-              <button 
-                type="button" 
-                className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:bg-gray-700" 
-                onClick={handleSubmit}
-                disabled={loading || step < 4}
-              >
-                {loading ? 'Creating...' : 'Create Booking'}
-              </button>
+
+            <div className="flex justify-between items-center pt-3 border-t border-[#E4E7EC] text-sm font-semibold text-[#0E1726]">
+              <span>Grand Total</span>
+              <span className="tabular-nums text-base">
+                <Money amount={grandTotal} />
+              </span>
             </div>
           </div>
         </div>
+      )}
+
+      {/* STEP 4: Payment */}
+      {step === 4 && (
+        <div className="bg-white border border-[#E4E7EC] rounded-[8px] p-6 space-y-4">
+          <h3 className="text-sm font-semibold text-[#0E1726]">Initial Payment / Deposit</h3>
+
+          <div className="grid grid-cols-3 gap-2">
+            {(['none', 'advance', 'full'] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setPaymentType(type)}
+                className={`py-2 text-xs font-medium rounded-[6px] border cursor-pointer capitalize transition-colors ${
+                  paymentType === type
+                    ? 'bg-[#0D5C4D] text-white border-[#0D5C4D]'
+                    : 'bg-white text-[#334155] border-[#E4E7EC] hover:bg-[#F7F8FA]'
+                }`}
+              >
+                {type === 'none' ? 'No payment' : type === 'advance' ? 'Advance deposit' : 'Full payment'}
+              </button>
+            ))}
+          </div>
+
+          {paymentType !== 'none' && (
+            <div className="space-y-3 pt-2">
+              <Input
+                type="number"
+                label="Payment Amount (₹)"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(Number(e.target.value))}
+              />
+
+              <Select
+                label="Payment Method"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full"
+              >
+                <option value="UPI">UPI / QR</option>
+                <option value="Google Pay">Google Pay</option>
+                <option value="PhonePe">PhonePe</option>
+                <option value="Card">Credit / Debit Card</option>
+                <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                <option value="Cash">Cash</option>
+              </Select>
+
+              <Input
+                label="Transaction / Reference ID (optional)"
+                placeholder="e.g. UPI8912049"
+                value={paymentRef}
+                onChange={(e) => setPaymentRef(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="p-3 bg-[#F7F8FA] border border-[#E4E7EC] rounded-[6px] flex justify-between items-center text-xs">
+            <span>Pending Balance at Checkout:</span>
+            <span className={`font-semibold tabular-nums ${balanceDue > 0 ? 'text-[#B45309]' : 'text-[#067647]'}`}>
+              <Money amount={balanceDue} />
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation Buttons */}
+      <div className="flex items-center justify-between pt-2">
+        {step > 1 ? (
+          <Button variant="secondary" onClick={() => setStep((s) => s - 1)}>
+            &larr; Back
+          </Button>
+        ) : (
+          <Button variant="ghost" onClick={() => navigate('/app/bookings')}>
+            Cancel
+          </Button>
+        )}
+
+        {step < 4 ? (
+          <Button variant="primary" onClick={handleNextStep}>
+            Continue &rarr;
+          </Button>
+        ) : (
+          <Button variant="primary" loading={loading} onClick={handleSubmitBooking}>
+            Confirm and create reservation
+          </Button>
+        )}
       </div>
     </div>
   );

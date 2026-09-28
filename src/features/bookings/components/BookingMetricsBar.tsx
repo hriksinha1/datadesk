@@ -1,63 +1,65 @@
 import React from 'react';
-import { CalendarDays, Users, ArrowDownRight, ArrowUpRight, AlertCircle } from 'lucide-react';
-import { fmtINR } from '../../../lib/utils/formatters';
+import { StatStrip, StatCell } from '../../../components/ui/StatStrip';
+import { Money } from '../../../components/ui/Typography';
 
 interface BookingMetricsBarProps {
-  totalCount: number;
+  arrivingTodayCount: number;
   inHouseCount: number;
-  arrivalsTodayCount: number;
-  departuresTodayCount: number;
-  outstandingBalance: number;
+  departingTodayCount: number;
+  totalOutstanding: number;
+  balanceBookingsCount: number;
+  activeStageFilter?: string;
+  onSelectStage: (stage: string) => void;
 }
 
-export default function BookingMetricsBar({
-  totalCount,
+export const BookingMetricsBar: React.FC<BookingMetricsBarProps> = ({
+  arrivingTodayCount,
   inHouseCount,
-  arrivalsTodayCount,
-  departuresTodayCount,
-  outstandingBalance,
-}: BookingMetricsBarProps) {
+  departingTodayCount,
+  totalOutstanding,
+  balanceBookingsCount,
+  activeStageFilter,
+  onSelectStage,
+}) => {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-        <span className="text-[11px] font-medium text-slate-500">Total Bookings</span>
-        <div className="text-xl font-bold text-slate-900 mt-0.5 tabular-nums">
-          {totalCount}
-        </div>
-        <span className="text-[10px] text-slate-400">All registered</span>
-      </div>
+    <StatStrip className="mb-4">
+      <StatCell
+        label="ARRIVING TODAY"
+        value={<span>{arrivingTodayCount}</span>}
+        caption="Stays checking in today"
+        active={activeStageFilter === 'arriving'}
+        onClick={() => onSelectStage(activeStageFilter === 'arriving' ? '' : 'arriving')}
+      />
 
-      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-        <span className="text-[11px] font-medium text-emerald-800">In-House Stays</span>
-        <div className="text-xl font-bold text-emerald-950 mt-0.5 tabular-nums">
-          {inHouseCount}
-        </div>
-        <span className="text-[10px] text-emerald-700">Currently staying</span>
-      </div>
+      <StatCell
+        label="IN HOUSE"
+        value={<span>{inHouseCount}</span>}
+        caption="Currently checked in"
+        active={activeStageFilter === 'inHouse'}
+        onClick={() => onSelectStage(activeStageFilter === 'inHouse' ? '' : 'inHouse')}
+      />
 
-      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-        <span className="text-[11px] font-medium text-blue-800">Arriving Today</span>
-        <div className="text-xl font-bold text-blue-950 mt-0.5 tabular-nums">
-          {arrivalsTodayCount}
-        </div>
-        <span className="text-[10px] text-blue-700">Due for check-in</span>
-      </div>
+      <StatCell
+        label="DEPARTING TODAY"
+        value={<span>{departingTodayCount}</span>}
+        caption="Stays checking out today"
+        active={activeStageFilter === 'departing'}
+        onClick={() => onSelectStage(activeStageFilter === 'departing' ? '' : 'departing')}
+      />
 
-      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-        <span className="text-[11px] font-medium text-slate-700">Departing Today</span>
-        <div className="text-xl font-bold text-slate-900 mt-0.5 tabular-nums">
-          {departuresTodayCount}
-        </div>
-        <span className="text-[10px] text-slate-500">Checkout schedule</span>
-      </div>
-
-      <div className="p-3 bg-white border border-amber-200 rounded-xl shadow-2xs bg-amber-50/20 col-span-2 sm:col-span-1">
-        <span className="text-[11px] font-semibold text-amber-900">Total Due</span>
-        <div className="text-xl font-bold text-amber-900 mt-0.5 tabular-nums truncate">
-          {fmtINR(outstandingBalance)}
-        </div>
-        <span className="text-[10px] text-amber-700 font-medium">Pending collection</span>
-      </div>
-    </div>
+      <StatCell
+        label="BALANCE DUE"
+        value={
+          <span className={totalOutstanding > 0 ? 'text-[#B45309]' : 'text-[#0E1726]'}>
+            <Money amount={totalOutstanding} />
+          </span>
+        }
+        caption={`${balanceBookingsCount} bookings with pending folios`}
+        active={activeStageFilter === 'balanceDue'}
+        onClick={() => onSelectStage(activeStageFilter === 'balanceDue' ? '' : 'balanceDue')}
+      />
+    </StatStrip>
   );
-}
+};
+
+export default BookingMetricsBar;

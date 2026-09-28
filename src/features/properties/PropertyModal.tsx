@@ -1,9 +1,21 @@
 import React, { useState } from 'react';
-import { repository } from '../../lib/repository';
-import { Property } from '../../lib/repository/types';
 import { X, Building } from 'lucide-react';
+import { Property } from '../../lib/repository/types';
+import { Button } from '../../components/ui/Button';
+import { Input, Select } from '../../components/ui/FormControls';
+import { useWorkspaceData } from '../../context/WorkspaceDataContext';
+import { useToast } from '../../components/ui/Toast';
 
-export default function PropertyModal({ onClose, onComplete }: { onClose: () => void, onComplete: () => void }) {
+export default function PropertyModal({
+  onClose,
+  onComplete,
+}: {
+  onClose: () => void;
+  onComplete: () => void;
+}) {
+  const { data, refetch } = useWorkspaceData();
+  const { showToast } = useToast();
+
   const [formData, setFormData] = useState<Omit<Property, 'id' | 'created_at'>>({
     name: '',
     property_type: 'Hotel',
@@ -16,9 +28,9 @@ export default function PropertyModal({ onClose, onComplete }: { onClose: () => 
     email: '',
     check_in_time: '14:00',
     check_out_time: '11:00',
-    active: true
+    active: true,
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,100 +39,133 @@ export default function PropertyModal({ onClose, onComplete }: { onClose: () => 
     setLoading(true);
     setError('');
     try {
+      const { repository } = await import('../../lib/repository');
       await repository.createProperty(formData);
+      await refetch();
+      showToast({ message: 'Property created successfully', type: 'success' });
       onComplete();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create property');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[1px]"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) onClose();
+      }}
+    >
+      <div className="w-full max-w-xl bg-white border border-[#E4E7EC] rounded-[8px] shadow-[0_8px_24px_rgba(14,23,38,0.16)] overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="h-14 px-5 border-b border-[#E4E7EC] flex items-center justify-between shrink-0 bg-white">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Building size={16} />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">Add New Property</h2>
+            <Building className="w-4 h-4 text-[#0D5C4D]" />
+            <h2 className="text-base font-semibold text-[#0E1726]">Add New Property</h2>
           </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
-            <X size={20} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-[#64748B] hover:text-[#0E1726] rounded-[4px] cursor-pointer"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-6">
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Property Name</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="e.g. The Grand Hotel" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm bg-white" value={formData.property_type} onChange={e => setFormData({...formData, property_type: e.target.value})}>
-                  <option>Hotel</option>
-                  <option>Resort</option>
-                  <option>Homestay</option>
-                  <option>Hostel</option>
-                  <option>Lodge</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Location / Area</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" placeholder="e.g. City Center, Beachfront" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required />
-              </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Address</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} required placeholder="Street address" />
-              </div>
+        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4">
+          {error && (
+            <div className="p-3 bg-[#FEF3F2] border border-[#FDA29B] rounded-[6px] text-xs text-[#B42318]">
+              {error}
+            </div>
+          )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.pincode} onChange={e => setFormData({...formData, pincode: e.target.value})} required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
-                <input type="tel" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
-                <input type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN <span className="text-gray-400 font-normal">(Optional)</span></label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-gray-900 focus:border-gray-900 text-sm uppercase font-mono" value={formData.gstin || ''} onChange={e => setFormData({...formData, gstin: e.target.value})} placeholder="22AAAAA0000A1Z5" />
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <Input
+                label="Property Name *"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                placeholder="e.g. The Grand Heritage"
+              />
             </div>
 
-            {error && <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">{error}</div>}
+            <Select
+              label="Property Type"
+              value={formData.property_type}
+              onChange={(e) => setFormData({ ...formData, property_type: e.target.value })}
+              className="w-full"
+            >
+              <option value="Hotel">Hotel</option>
+              <option value="Resort">Resort</option>
+              <option value="Homestay">Homestay</option>
+              <option value="Hostel">Hostel</option>
+              <option value="Guest House">Guest House</option>
+            </Select>
+
+            <Input
+              label="Location / Area"
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              placeholder="e.g. City Center, Beach Road"
+            />
+
+            <Input
+              label="City *"
+              value={formData.city}
+              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+              required
+              placeholder="e.g. Mysuru"
+            />
+
+            <Input
+              label="State *"
+              value={formData.state}
+              onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+              required
+              placeholder="e.g. Karnataka"
+            />
+
+            <Input
+              label="Phone Number *"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              required
+              placeholder="+91 98765 43210"
+            />
+
+            <Input
+              label="Email Address"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="contact@property.com"
+            />
+
+            <Input
+              type="time"
+              label="Standard Check-in Time"
+              value={formData.check_in_time}
+              onChange={(e) => setFormData({ ...formData, check_in_time: e.target.value })}
+            />
+
+            <Input
+              type="time"
+              label="Standard Check-out Time"
+              value={formData.check_out_time}
+              onChange={(e) => setFormData({ ...formData, check_out_time: e.target.value })}
+            />
           </div>
 
-          <div className="flex gap-3 pt-6 mt-6 border-t border-gray-100">
-            <button type="button" className="flex-1 py-2.5 px-4 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors" onClick={onClose} disabled={loading}>
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#E4E7EC]">
+            <Button variant="secondary" type="button" onClick={onClose} disabled={loading}>
               Cancel
-            </button>
-            <button type="submit" className="flex-1 py-2.5 px-4 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors" disabled={loading}>
-              {loading ? 'Saving...' : 'Add Property'}
-            </button>
+            </Button>
+            <Button variant="primary" type="submit" loading={loading}>
+              Create Property
+            </Button>
           </div>
         </form>
       </div>

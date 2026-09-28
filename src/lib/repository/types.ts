@@ -1,3 +1,17 @@
+export const BOOKING_STATUSES = ['Confirmed', 'Checked In', 'Completed', 'Cancelled'] as const;
+export type BookingStatus = typeof BOOKING_STATUSES[number];
+
+export const PAYMENT_STATUSES = ['Unpaid', 'Partially Paid', 'Paid'] as const;
+export type PaymentStatus = typeof PAYMENT_STATUSES[number];
+
+export function isBookingStatus(val: unknown): val is BookingStatus {
+  return typeof val === 'string' && (BOOKING_STATUSES as readonly string[]).includes(val);
+}
+
+export function isPaymentStatus(val: unknown): val is PaymentStatus {
+  return typeof val === 'string' && (PAYMENT_STATUSES as readonly string[]).includes(val);
+}
+
 export interface Property {
   id: string;
   name: string;
@@ -17,6 +31,29 @@ export interface Property {
   created_at: string;
 }
 
+export interface Unit {
+  id: string;
+  property_id: string;
+  number: string;
+  unit_type: string;
+  floor?: string;
+  capacity?: number;
+  status: 'active' | 'inactive';
+  sort_order?: number;
+  created_at: string;
+}
+
+export interface UnitBlock {
+  id: string;
+  unit_id: string;
+  property_id: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD (exclusive)
+  reason: 'Maintenance' | 'Other';
+  note?: string;
+  created_at: string;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -30,6 +67,7 @@ export interface Booking {
   booking_no: string;
   customer_id: string;
   property_id: string;
+  unit_id?: string;
   check_in: string;
   check_out: string;
   nights: number;
@@ -43,11 +81,12 @@ export interface Booking {
   tax_rate: number;
   tax_amount: number;
   grand_total: number;
-  booking_status: string;
-  payment_status: string;
+  booking_status: BookingStatus | string;
+  payment_status: PaymentStatus | string;
   created_at: string;
   customer?: Customer;
   property?: Property;
+  unit?: Unit;
 }
 
 export interface Payment {
@@ -61,7 +100,7 @@ export interface Payment {
   purpose?: string;
   status: string;
   created_at: string;
-  booking?: any;
+  booking?: Booking;
 }
 
 export interface Notification {
@@ -86,6 +125,15 @@ export interface IRepository {
   getProperty(id: string): Promise<Property | null>;
   createProperty(data: Omit<Property, 'id' | 'created_at'>): Promise<Property>;
   updateProperty(id: string, data: Partial<Property>): Promise<Property>;
+
+  getUnits(propertyId?: string): Promise<Unit[]>;
+  getUnit(id: string): Promise<Unit | null>;
+  createUnit(data: Omit<Unit, 'id' | 'created_at'>): Promise<Unit>;
+  updateUnit(id: string, data: Partial<Unit>): Promise<Unit>;
+
+  getUnitBlocks(propertyId?: string): Promise<UnitBlock[]>;
+  createUnitBlock(data: Omit<UnitBlock, 'id' | 'created_at'>): Promise<UnitBlock>;
+  deleteUnitBlock(id: string): Promise<void>;
 
   getCustomers(): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | null>;

@@ -56,7 +56,7 @@ export default function HeroSection() {
               <Check size={14} className="text-emerald-700" /> Free to use
             </span>
             <span className="flex items-center gap-1.5">
-              <Check size={14} className="text-emerald-700" /> No credit card required
+              <Check size={14} className="text-emerald-700" /> Free for every property
             </span>
             <span className="flex items-center gap-1.5">
               <Check size={14} className="text-emerald-700" /> Multi-property ready

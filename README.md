@@ -1,19 +1,47 @@
-# Hotel Booking Manager
+# MyTrackYo
 
-A comprehensive, multi-property Property Management System (PMS) built with React and Appwrite.
+A modern, front-desk-focused Property Management System (PMS) designed for independent hotels, homestays, resorts, hostels, and multi-property hospitality operators.
 
-## Architecture Migration
-The application has been successfully migrated from Supabase to **Appwrite** for its backend infrastructure.
+## Architecture
 
-## Deployment to Netlify
-Since the app is a pure Client-Side SPA (Single Page Application) built with Vite, it is perfectly suited for zero-config Netlify deployment.
-1. Push this repository to GitHub.
-2. Log in to Netlify and select **Add new site** > **Import an existing project**.
-3. Choose your GitHub repository.
-4. Set the **Build Command** to: `npm run build`
-5. Set the **Publish directory** to: `dist`
-6. Add your Environment Variables in the Netlify dashboard (`VITE_APPWRITE_ENDPOINT`, `VITE_APPWRITE_PROJECT`).
-7. Deploy! Netlify will automatically handle the routing fallback to `index.html`.
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, React Router v7.
+- **Backend / Auth**: Appwrite Cloud or self-hosted Appwrite.
+- **Offline / Sample Workspace**: Built-in self-consistent Demo Repository with relative date seeding and local persistence.
+- **Deployment**: Zero-config Single-Page Application (SPA) deployment on **Vercel**.
 
-## Appwrite Configuration
-Before using the app, you must configure your Appwrite database. Follow the instructions in `APPWRITE_SETUP.md` at the root of the project to set up your Database and Collections.
+## Environment Configuration
+
+Configure the following environment variables (see `.env.example`):
+
+```env
+VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
+VITE_APPWRITE_PROJECT=your_project_id
+VITE_APPWRITE_DB_ID=your_database_id
+```
+
+For full database schema setup, refer to [APPWRITE_SETUP.md](./APPWRITE_SETUP.md).
+
+## Vercel Deployment
+
+MyTrackYo is ready for instant deployment to Vercel:
+1. Import the repository in your Vercel Dashboard.
+2. Build command: `npm run build`
+3. Output directory: `dist`
+4. Add environment variables: `VITE_APPWRITE_ENDPOINT`, `VITE_APPWRITE_PROJECT`, `VITE_APPWRITE_DB_ID`.
+5. Deploy! Single-page app routing is managed by `vercel.json`.
+
+## Development & Testing
+
+```bash
+# Install dependencies
+npm install
+
+# Start local development server
+npm run dev
+
+# Run unit tests
+npm test
+
+# Build for production
+npm run build
+```

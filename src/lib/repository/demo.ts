@@ -1,10 +1,22 @@
-import { IRepository, Property, Customer, Booking, Payment, Notification, BusinessSettings } from './types';
+import {
+  IRepository,
+  Property,
+  Unit,
+  UnitBlock,
+  Customer,
+  Booking,
+  Payment,
+  Notification,
+  BusinessSettings
+} from './types';
 import { generateId } from '../utils/formatters';
 
-const STORAGE_KEY = 'hotel_manager_demo_db_v2';
+const STORAGE_KEY = 'hotel_manager_demo_db_v3';
 
 interface DemoDB {
   properties: Property[];
+  units: Unit[];
+  unit_blocks: UnitBlock[];
   customers: Customer[];
   bookings: Booking[];
   payments: Payment[];
@@ -12,11 +24,14 @@ interface DemoDB {
   settings: BusinessSettings;
 }
 
-// Utility to format dates relative to today: offset in days
+// Utility to format dates relative to today in YYYY-MM-DD
 function getRelDate(offsetDays: number): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function buildSeedData(): DemoDB {
@@ -106,6 +121,148 @@ function buildSeedData(): DemoDB {
     }
   ];
 
+  // Exactly 70 units total across properties:
+  // p1: 24 units (101-112, 201-212)
+  // p2: 16 units (C-01 to C-08, V-01 to V-08)
+  // p3: 6 units (H-01 to H-06)
+  // p4: 4 units (P-01 to P-04)
+  // p5: 20 units (301 to 320)
+  const units: Unit[] = [];
+
+  // P1 units (24)
+  for (let i = 1; i <= 12; i++) {
+    const num = (100 + i).toString();
+    const isSuite = i % 4 === 3;
+    units.push({
+      id: `u-p1-${num}`,
+      property_id: 'p1',
+      number: num,
+      unit_type: isSuite ? 'Executive Suite' : i <= 6 ? 'Deluxe Room' : 'Standard Room',
+      floor: 'Floor 1',
+      capacity: isSuite ? 4 : 2,
+      status: 'active',
+      sort_order: i,
+      created_at: new Date().toISOString()
+    });
+  }
+  for (let i = 1; i <= 12; i++) {
+    const num = (200 + i).toString();
+    const isSuite = i % 4 === 3;
+    units.push({
+      id: `u-p1-${num}`,
+      property_id: 'p1',
+      number: num,
+      unit_type: isSuite ? 'Executive Suite' : i <= 6 ? 'Deluxe Room' : 'Standard Room',
+      floor: 'Floor 2',
+      capacity: isSuite ? 4 : 2,
+      status: 'active',
+      sort_order: 12 + i,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  // P2 units (16)
+  for (let i = 1; i <= 8; i++) {
+    const num = `C-0${i}`;
+    units.push({
+      id: `u-p2-${num}`,
+      property_id: 'p2',
+      number: num,
+      unit_type: 'Cottage Villa',
+      floor: 'Ground',
+      capacity: 3,
+      status: 'active',
+      sort_order: i,
+      created_at: new Date().toISOString()
+    });
+  }
+  for (let i = 1; i <= 8; i++) {
+    const num = `V-0${i}`;
+    units.push({
+      id: `u-p2-${num}`,
+      property_id: 'p2',
+      number: num,
+      unit_type: 'Valley Suite',
+      floor: 'Upper',
+      capacity: 4,
+      status: 'active',
+      sort_order: 8 + i,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  // P3 units (6)
+  for (let i = 1; i <= 6; i++) {
+    const num = `H-0${i}`;
+    units.push({
+      id: `u-p3-${num}`,
+      property_id: 'p3',
+      number: num,
+      unit_type: 'Sea View Room',
+      floor: 'Beachfront',
+      capacity: 2,
+      status: 'active',
+      sort_order: i,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  // P4 units (4)
+  for (let i = 1; i <= 4; i++) {
+    const num = `P-0${i}`;
+    units.push({
+      id: `u-p4-${num}`,
+      property_id: 'p4',
+      number: num,
+      unit_type: 'Pine Cabin',
+      floor: 'Ground',
+      capacity: 4,
+      status: 'active',
+      sort_order: i,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  // P5 units (20)
+  for (let i = 1; i <= 20; i++) {
+    const num = (300 + i).toString();
+    units.push({
+      id: `u-p5-${num}`,
+      property_id: 'p5',
+      number: num,
+      unit_type: i <= 10 ? 'Business King' : 'Executive Twin',
+      floor: i <= 10 ? 'Floor 3' : 'Floor 4',
+      capacity: 2,
+      status: 'active',
+      sort_order: i,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  // Unit blocks: 2 real maintenance records
+  const unit_blocks: UnitBlock[] = [
+    {
+      id: 'blk-1',
+      unit_id: 'u-p1-204',
+      property_id: 'p1',
+      start_date: getRelDate(0),
+      end_date: getRelDate(2),
+      reason: 'Maintenance',
+      note: 'AC filter inspection and scheduled servicing',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'blk-2',
+      unit_id: 'u-p2-C-03',
+      property_id: 'p2',
+      start_date: getRelDate(-1),
+      end_date: getRelDate(2),
+      reason: 'Maintenance',
+      note: 'Plumbing fixture replacement',
+      created_at: new Date().toISOString()
+    }
+  ];
+
   const customers: Customer[] = [
     { id: 'c1', name: 'Rahul Sharma', phone: '+91 91234 56701', email: 'rahul.sharma@gmail.com', created_at: new Date().toISOString() },
     { id: 'c2', name: 'Priya Patel', phone: '+91 91234 56702', email: 'priya.patel@outlook.com', created_at: new Date().toISOString() },
@@ -121,7 +278,6 @@ function buildSeedData(): DemoDB {
     { id: 'c12', name: 'Tanmay Ghosh', phone: '+91 91234 56712', email: 'tanmay.ghosh@iit.ac.in', created_at: new Date().toISOString() }
   ];
 
-  // Bookings with dynamic dates relative to today
   const bookings: Booking[] = [
     // Today's Arrival: Room 101 - The Fern Residency
     {
@@ -129,7 +285,8 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-1048',
       customer_id: 'c3',
       property_id: 'p1',
-      check_in: getRelDate(0), // Today
+      unit_id: 'u-p1-101',
+      check_in: getRelDate(0),
       check_out: getRelDate(3),
       nights: 3,
       rooms: 1,
@@ -152,7 +309,8 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-1049',
       customer_id: 'c4',
       property_id: 'p1',
-      check_in: getRelDate(0), // Today
+      unit_id: 'u-p1-102',
+      check_in: getRelDate(0),
       check_out: getRelDate(2),
       nights: 2,
       rooms: 1,
@@ -165,17 +323,18 @@ function buildSeedData(): DemoDB {
       tax_amount: 1320,
       grand_total: 12320,
       booking_status: 'Confirmed',
-      payment_status: 'Fully Paid',
+      payment_status: 'Paid',
       created_at: new Date(Date.now() - 86400000 * 3).toISOString()
     },
-    // Today's Departure: Room 104 - The Fern Residency (Stayed from 2 days ago to today)
+    // Today's Departure: Room 104 - The Fern Residency
     {
       id: 'b3',
       booking_no: 'BK-1043',
       customer_id: 'c1',
       property_id: 'p1',
+      unit_id: 'u-p1-104',
       check_in: getRelDate(-3),
-      check_out: getRelDate(0), // Today checkout
+      check_out: getRelDate(0),
       nights: 3,
       rooms: 1,
       guests: 1,
@@ -186,17 +345,18 @@ function buildSeedData(): DemoDB {
       tax_rate: 12,
       tax_amount: 1080,
       grand_total: 10080,
-      booking_status: 'Confirmed',
-      payment_status: 'Partially Paid', // Checkout pending folio clearance
+      booking_status: 'Checked In',
+      payment_status: 'Partially Paid',
       created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
       notes: 'Airport taxi requested for 11:30 AM.'
     },
-    // In-House Guest: Room 103 Suite (Checked in yesterday, leaves in 2 days)
+    // In-House Guest: Room 103 Suite
     {
       id: 'b4',
       booking_no: 'BK-1045',
       customer_id: 'c2',
       property_id: 'p1',
+      unit_id: 'u-p1-103',
       check_in: getRelDate(-1),
       check_out: getRelDate(2),
       nights: 3,
@@ -210,7 +370,7 @@ function buildSeedData(): DemoDB {
       tax_amount: 4860,
       grand_total: 31860,
       booking_status: 'Checked In',
-      payment_status: 'Fully Paid',
+      payment_status: 'Paid',
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
     // In-House Guest: Room 201 Deluxe
@@ -219,6 +379,7 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-1046',
       customer_id: 'c5',
       property_id: 'p1',
+      unit_id: 'u-p1-201',
       check_in: getRelDate(-2),
       check_out: getRelDate(1),
       nights: 3,
@@ -232,7 +393,7 @@ function buildSeedData(): DemoDB {
       tax_amount: 1980,
       grand_total: 18480,
       booking_status: 'Checked In',
-      payment_status: 'Fully Paid',
+      payment_status: 'Paid',
       created_at: new Date(Date.now() - 86400000 * 6).toISOString()
     },
     // In-House Guest: Room 202 Deluxe
@@ -241,6 +402,7 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-1047',
       customer_id: 'c6',
       property_id: 'p1',
+      unit_id: 'u-p1-202',
       check_in: getRelDate(-1),
       check_out: getRelDate(3),
       nights: 4,
@@ -263,7 +425,8 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-1050',
       customer_id: 'c7',
       property_id: 'p1',
-      check_in: getRelDate(1), // Tomorrow
+      unit_id: 'u-p1-104',
+      check_in: getRelDate(1),
       check_out: getRelDate(4),
       nights: 3,
       rooms: 1,
@@ -276,7 +439,7 @@ function buildSeedData(): DemoDB {
       tax_amount: 1260,
       grand_total: 11760,
       booking_status: 'Confirmed',
-      payment_status: 'Fully Paid',
+      payment_status: 'Paid',
       created_at: new Date(Date.now() - 86400000).toISOString()
     },
     // Upcoming: Room 203 Suite starts in 2 days
@@ -285,6 +448,7 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-1051',
       customer_id: 'c8',
       property_id: 'p1',
+      unit_id: 'u-p1-203',
       check_in: getRelDate(2),
       check_out: getRelDate(5),
       nights: 3,
@@ -308,7 +472,8 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-2021',
       customer_id: 'c9',
       property_id: 'p2',
-      check_in: getRelDate(0), // Today arrival
+      unit_id: 'u-p2-C-01',
+      check_in: getRelDate(0),
       check_out: getRelDate(3),
       nights: 3,
       rooms: 1,
@@ -329,6 +494,7 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-2022',
       customer_id: 'c10',
       property_id: 'p2',
+      unit_id: 'u-p2-V-04',
       check_in: getRelDate(-2),
       check_out: getRelDate(1),
       nights: 3,
@@ -342,7 +508,7 @@ function buildSeedData(): DemoDB {
       tax_amount: 8100,
       grand_total: 53100,
       booking_status: 'Checked In',
-      payment_status: 'Fully Paid',
+      payment_status: 'Paid',
       created_at: new Date(Date.now() - 86400000 * 5).toISOString()
     },
     {
@@ -350,8 +516,9 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-2023',
       customer_id: 'c11',
       property_id: 'p2',
+      unit_id: 'u-p2-C-02',
       check_in: getRelDate(-3),
-      check_out: getRelDate(0), // Today checkout
+      check_out: getRelDate(0),
       nights: 3,
       rooms: 1,
       guests: 2,
@@ -362,8 +529,8 @@ function buildSeedData(): DemoDB {
       tax_rate: 18,
       tax_amount: 4680,
       grand_total: 30680,
-      booking_status: 'Confirmed',
-      payment_status: 'Fully Paid',
+      booking_status: 'Checked In',
+      payment_status: 'Paid',
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
 
@@ -373,6 +540,7 @@ function buildSeedData(): DemoDB {
       booking_no: 'BK-3011',
       customer_id: 'c12',
       property_id: 'p3',
+      unit_id: 'u-p3-H-01',
       check_in: getRelDate(-1),
       check_out: getRelDate(2),
       nights: 3,
@@ -388,10 +556,57 @@ function buildSeedData(): DemoDB {
       booking_status: 'Checked In',
       payment_status: 'Partially Paid',
       created_at: new Date(Date.now() - 86400000 * 3).toISOString()
+    },
+
+    // --- Property 4: Pinecrest Cabin ---
+    {
+      id: 'b13',
+      booking_no: 'BK-4001',
+      customer_id: 'c1',
+      property_id: 'p4',
+      unit_id: 'u-p4-P-01',
+      check_in: getRelDate(-2),
+      check_out: getRelDate(1),
+      nights: 3,
+      rooms: 1,
+      guests: 3,
+      room_type: 'Pine Cabin',
+      room_number: 'P-01',
+      base_amount: 18000,
+      tax_enabled: false,
+      tax_rate: 0,
+      tax_amount: 0,
+      grand_total: 18000,
+      booking_status: 'Checked In',
+      payment_status: 'Paid',
+      created_at: new Date(Date.now() - 86400000 * 4).toISOString()
+    },
+
+    // --- Property 5: Oasis Business Hotel ---
+    {
+      id: 'b14',
+      booking_no: 'BK-5001',
+      customer_id: 'c2',
+      property_id: 'p5',
+      unit_id: 'u-p5-301',
+      check_in: getRelDate(0),
+      check_out: getRelDate(2),
+      nights: 2,
+      rooms: 1,
+      guests: 1,
+      room_type: 'Business King',
+      room_number: '301',
+      base_amount: 14000,
+      tax_enabled: true,
+      tax_rate: 18,
+      tax_amount: 2520,
+      grand_total: 16520,
+      booking_status: 'Confirmed',
+      payment_status: 'Paid',
+      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
     }
   ];
 
-  // Payments matching the bookings
   const payments: Payment[] = [
     // b1 (Ananya Desai - ₹16,800 total, paid ₹8,300 advance -> ₹8,500 due)
     {
@@ -403,7 +618,7 @@ function buildSeedData(): DemoDB {
       method: 'UPI',
       ref_id: 'UPI98234812',
       purpose: 'Advance Deposit',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 2).toISOString()
     },
     // b2 (Vikram Singh - Fully Paid ₹12,320)
@@ -416,7 +631,7 @@ function buildSeedData(): DemoDB {
       method: 'Card',
       ref_id: 'TXN4892019',
       purpose: 'Full Prepayment',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 3).toISOString()
     },
     // b3 (Rahul Sharma - Total ₹10,080, paid ₹5,000 -> ₹5,080 due at checkout)
@@ -429,7 +644,7 @@ function buildSeedData(): DemoDB {
       method: 'Google Pay',
       ref_id: 'GPAY7482910',
       purpose: 'Advance',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 3).toISOString()
     },
     // b4 (Priya Patel - Fully Paid ₹31,860)
@@ -442,7 +657,7 @@ function buildSeedData(): DemoDB {
       method: 'NEFT Transfer',
       ref_id: 'NEFT84920491',
       purpose: 'Full Payment',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
     // b5 (Neha Gupta - Fully Paid ₹18,480)
@@ -455,7 +670,7 @@ function buildSeedData(): DemoDB {
       method: 'Card',
       ref_id: 'POS-89214',
       purpose: 'Full Payment',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 6).toISOString()
     },
     // b6 (Karthik Reddy - Total ₹24,640, paid ₹15,000 -> ₹9,640 due)
@@ -468,7 +683,7 @@ function buildSeedData(): DemoDB {
       method: 'UPI',
       ref_id: 'UPI8391024',
       purpose: 'Advance',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
     // b7 (Sonal Iyer - Fully Paid ₹11,760)
@@ -481,7 +696,7 @@ function buildSeedData(): DemoDB {
       method: 'UPI',
       ref_id: 'UPI9019284',
       purpose: 'Full Payment',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000).toISOString()
     },
     // b9 (Meera Rao - Total ₹33,040, paid ₹15,000 -> ₹18,040 due)
@@ -494,7 +709,7 @@ function buildSeedData(): DemoDB {
       method: 'Card',
       ref_id: 'POS-77192',
       purpose: 'Advance',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 2).toISOString()
     },
     // b10 (Rohan Mehta - Fully Paid ₹53,100)
@@ -507,7 +722,7 @@ function buildSeedData(): DemoDB {
       method: 'Bank Transfer',
       ref_id: 'RTGS9102941',
       purpose: 'Corporate Full Payment',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 5).toISOString()
     },
     // b11 (Sunita Menon - Fully Paid ₹30,680)
@@ -520,7 +735,7 @@ function buildSeedData(): DemoDB {
       method: 'UPI',
       ref_id: 'UPI8892102',
       purpose: 'Full Payment',
-      status: 'Completed',
+      status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 4).toISOString()
     },
     // b12 (Tanmay Ghosh - Total ₹12,000, paid ₹6,000 -> ₹6,000 due)
@@ -534,6 +749,32 @@ function buildSeedData(): DemoDB {
       purpose: 'Cash Advance',
       status: 'Recorded',
       created_at: new Date(Date.now() - 86400000 * 3).toISOString()
+    },
+    // b13 (Pinecrest Cabin - Rahul Sharma - ₹18,000)
+    {
+      id: 'pay12',
+      payment_no: 'PAY-9022',
+      booking_id: 'b13',
+      date: getRelDate(-2),
+      amount: 18000,
+      method: 'UPI',
+      ref_id: 'UPI9920194',
+      purpose: 'Full Prepayment',
+      status: 'Recorded',
+      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
+    },
+    // b14 (Oasis Business Hotel - Priya Patel - ₹16,520)
+    {
+      id: 'pay13',
+      payment_no: 'PAY-9023',
+      booking_id: 'b14',
+      date: getRelDate(-2),
+      amount: 16520,
+      method: 'Card',
+      ref_id: 'POS-99321',
+      purpose: 'Corporate Payment',
+      status: 'Recorded',
+      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
     }
   ];
 
@@ -544,6 +785,8 @@ function buildSeedData(): DemoDB {
       gstin: '29ABCDE1234F1Z5'
     },
     properties,
+    units,
+    unit_blocks,
     customers,
     bookings,
     payments,
@@ -555,22 +798,32 @@ class DemoRepositoryImpl implements IRepository {
   private db: DemoDB;
 
   constructor() {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    this.db = this.loadDB();
+  }
+
+  private loadDB(): DemoDB {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     if (stored) {
       try {
-        this.db = JSON.parse(stored);
-      } catch (e) {
-        this.db = buildSeedData();
-        this.save();
+        const parsed = JSON.parse(stored) as DemoDB;
+        if (parsed.properties && parsed.units && parsed.bookings) {
+          return parsed;
+        }
+      } catch {
+        // invalid
       }
-    } else {
-      this.db = buildSeedData();
-      this.save();
     }
+    const fresh = buildSeedData();
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    }
+    return fresh;
   }
 
   private save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
+    }
   }
 
   // --- Properties ---
@@ -592,6 +845,46 @@ class DemoRepositoryImpl implements IRepository {
     this.db.properties[idx] = { ...this.db.properties[idx], ...data };
     this.save();
     return this.db.properties[idx];
+  }
+
+  // --- Units ---
+  async getUnits(propertyId?: string) {
+    let us = [...this.db.units];
+    if (propertyId) us = us.filter(u => u.property_id === propertyId);
+    return us.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  }
+  async getUnit(id: string) {
+    return this.db.units.find(u => u.id === id) || null;
+  }
+  async createUnit(data: Omit<Unit, 'id' | 'created_at'>) {
+    const unit: Unit = { ...data, id: generateId('U-'), created_at: new Date().toISOString() };
+    this.db.units.push(unit);
+    this.save();
+    return unit;
+  }
+  async updateUnit(id: string, data: Partial<Unit>) {
+    const idx = this.db.units.findIndex(u => u.id === id);
+    if (idx === -1) throw new Error('Unit not found');
+    this.db.units[idx] = { ...this.db.units[idx], ...data };
+    this.save();
+    return this.db.units[idx];
+  }
+
+  // --- Unit Blocks ---
+  async getUnitBlocks(propertyId?: string) {
+    let bs = [...this.db.unit_blocks];
+    if (propertyId) bs = bs.filter(b => b.property_id === propertyId);
+    return bs;
+  }
+  async createUnitBlock(data: Omit<UnitBlock, 'id' | 'created_at'>) {
+    const block: UnitBlock = { ...data, id: generateId('BLK-'), created_at: new Date().toISOString() };
+    this.db.unit_blocks.push(block);
+    this.save();
+    return block;
+  }
+  async deleteUnitBlock(id: string) {
+    this.db.unit_blocks = this.db.unit_blocks.filter(b => b.id !== id);
+    this.save();
   }
 
   // --- Customers ---

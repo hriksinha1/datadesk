@@ -1,190 +1,264 @@
 import React from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { Booking } from '../../../lib/repository/types';
-import { fmtINR, fmtDate } from '../../../lib/utils/formatters';
-import { ChevronRight, ExternalLink, Calendar, User, Building } from 'lucide-react';
+import { DataTable, Column } from '../../../components/ui/DataTable';
+import { StatusBadge, BalanceCell } from '../../../components/ui/Badges';
+import { Money, DateText } from '../../../components/ui/Typography';
+import { Button } from '../../../components/ui/Button';
+import { EmptyState } from '../../../components/ui/StateFeedback';
+import { BookingPaymentSummary } from '../../../lib/utils/financials';
+import { stage } from '../../../lib/analytics';
 
 interface BookingTableViewProps {
   bookings: Booking[];
-  paymentsByBooking: Record<string, number>;
+  balancesByBookingId: Record<string, BookingPaymentSummary>;
+  scopeIsAll: boolean;
+  today: string;
+  onCheckIn: (bookingId: string) => Promise<void>;
+  onCheckOut: (bookingId: string) => Promise<void>;
+  onAddPayment: (booking: Booking) => void;
+  // Sorting & pagination
+  sortKey?: string;
+  sortOrder?: 'asc' | 'desc';
+  onSort?: (key: string) => void;
+  page?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  onClearFilters?: () => void;
+  hasFilters?: boolean;
 }
 
-export default function BookingTableView({ bookings, paymentsByBooking }: BookingTableViewProps) {
+export const BookingTableView: React.FC<BookingTableViewProps> = ({
+  bookings,
+  balancesByBookingId,
+  scopeIsAll,
+  today,
+  onCheckIn,
+  onCheckOut,
+  onAddPayment,
+  sortKey,
+  sortOrder,
+  onSort,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  onClearFilters,
+  hasFilters,
+}) => {
   const navigate = useNavigate();
 
-  if (bookings.length === 0) {
+  const columns: Column<Booking>[] = [
+    // 1. Guest
+    {
+      key: 'customer',
+      header: 'Guest',
+      sortable: true,
+      width: '28%',
+      render: (b) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-[#EAF4F1] text-[#0D5C4D] flex items-center justify-center font-medium text-xs shrink-0 select-none">
+            {b.customer?.name ? b.customer.name.slice(0, 2).toUpperCase() : 'G'}
+          </div>
+          <div className="min-w-0">
+            <Link
+              to={`/app/bookings/${b.id}`}
+              className="font-medium text-[#0E1726] hover:text-[#0D5C4D] hover:underline block truncate"
+            >
+              {b.customer?.name || 'Guest'}
+            </Link>
+            <div className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
+              <span className="font-mono">{b.booking_no}</span>
+              {b.customer?.phone && (
+                <>
+                  <span>·</span>
+                  <span className="hidden xl:inline">{b.customer.phone}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+
+    // 2. Stay Dates
+    {
+      key: 'check_in',
+      header: 'Stay',
+      sortable: true,
+      width: '22%',
+      render: (b) => (
+        <div>
+          <div className="font-medium text-[#0E1726] text-xs sm:text-sm whitespace-nowrap">
+            <DateText date={b.check_in} format="short" /> &rarr;{' '}
+            <DateText date={b.check_out} format="short" />
+          </div>
+          <div className="text-xs text-[#64748B] mt-0.5">
+            {b.nights} {b.nights === 1 ? 'night' : 'nights'} · {b.guests} {b.guests === 1 ? 'guest' : 'guests'}
+          </div>
+        </div>
+      ),
+    },
+
+    // 3. Unit / Room
+    {
+      key: 'unit',
+      header: 'Unit',
+      width: '18%',
+      render: (b) => (
+        <div>
+          <div className="font-medium text-[#0E1726] text-xs sm:text-sm">
+            {b.room_number ? `Room ${b.room_number}` : b.room_type}
+          </div>
+          <div className="text-xs text-[#64748B] mt-0.5 truncate">
+            {b.room_number ? b.room_type : 'Unassigned'}
+            {scopeIsAll && b.property && (
+              <span className="text-[#0D5C4D]"> · {b.property.name}</span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+
+    // 4. Booking Status
+    {
+      key: 'status',
+      header: 'Status',
+      width: '12%',
+      render: (b) => <StatusBadge status={b.booking_status} />,
+    },
+
+    // 5. Total
+    {
+      key: 'grand_total',
+      header: 'Total',
+      align: 'right',
+      sortable: true,
+      width: '10%',
+      render: (b) => (
+        <span className="font-medium text-[#0E1726] tabular-nums">
+          <Money amount={b.grand_total} />
+        </span>
+      ),
+    },
+
+    // 6. Balance Due
+    {
+      key: 'balance',
+      header: 'Balance',
+      align: 'right',
+      sortable: true,
+      width: '10%',
+      render: (b) => {
+        const bal = balancesByBookingId[b.id]?.balanceDue || 0;
+        return <BalanceCell balanceDue={bal} />;
+      },
+    },
+
+    // 7. Context Action & Chevron
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      width: '8%',
+      render: (b) => {
+        const st = stage(b, today);
+        const bal = balancesByBookingId[b.id]?.balanceDue || 0;
+
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {st === 'arriving' && b.booking_status === 'Confirmed' && (
+              <Button size="sm" variant="secondary" onClick={() => onCheckIn(b.id)}>
+                Check in
+              </Button>
+            )}
+
+            {st === 'departing' && b.booking_status === 'Checked In' && (
+              <Button size="sm" variant="secondary" onClick={() => onCheckOut(b.id)}>
+                Check out
+              </Button>
+            )}
+
+            {st === 'inHouse' && bal > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => onAddPayment(b)}>
+                Pay
+              </Button>
+            )}
+
+            <Link
+              to={`/app/bookings/${b.id}`}
+              className="p-1 text-[#94A3B8] hover:text-[#0E1726] transition-colors"
+              aria-label={`View booking ${b.booking_no}`}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+        );
+      },
+    },
+  ];
+
+  // Mobile card renderer (<768px)
+  const renderMobileCard = (b: Booking) => {
+    const bal = balancesByBookingId[b.id]?.balanceDue || 0;
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-2xs">
-        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
-          <Calendar size={24} />
+      <Link to={`/app/bookings/${b.id}`} className="block space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-sm text-[#0E1726]">{b.customer?.name || 'Guest'}</div>
+          <StatusBadge status={b.booking_status} />
         </div>
-        <h3 className="text-sm font-bold text-slate-900">No reservations match your criteria</h3>
-        <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-          Try clearing search filters or add a new booking for your property.
-        </p>
-        <div className="mt-4">
-          <Link
-            to="/app/bookings/new"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-xs"
-          >
-            Create New Booking
-          </Link>
+
+        <div className="text-xs text-[#64748B] flex items-center justify-between">
+          <span>
+            {b.check_in} &rarr; {b.check_out} ({b.nights}N)
+          </span>
+          <span className="font-medium text-[#334155]">
+            {b.room_number ? `Room ${b.room_number}` : b.room_type}
+          </span>
         </div>
-      </div>
+
+        <div className="flex items-center justify-between pt-1 border-t border-[#E4E7EC] text-xs">
+          <span className="font-semibold text-[#0E1726]">
+            <Money amount={b.grand_total} />
+          </span>
+          <BalanceCell balanceDue={bal} />
+        </div>
+      </Link>
     );
-  }
+  };
+
+  const emptyState = hasFilters ? (
+    <EmptyState
+      title="No bookings match your filters"
+      description="Try clearing search or relaxing status/stage filters."
+      action={onClearFilters ? { label: 'Clear filters', onClick: onClearFilters } : undefined}
+    />
+  ) : (
+    <EmptyState
+      title="No bookings recorded yet"
+      description="Create your first guest reservation to start tracking stays and folios."
+      action={{ label: 'New booking', onClick: () => navigate('/app/bookings/new') }}
+    />
+  );
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold sticky top-0 z-10">
-            <tr>
-              <th className="py-3 px-4">Guest</th>
-              <th className="py-3 px-3">Booking #</th>
-              <th className="py-3 px-3">Property</th>
-              <th className="py-3 px-3">Stay Dates</th>
-              <th className="py-3 px-3">Room / Unit</th>
-              <th className="py-3 px-3 text-right">Grand Total</th>
-              <th className="py-3 px-3 text-right">Balance Due</th>
-              <th className="py-3 px-3 text-center">Payment</th>
-              <th className="py-3 px-3 text-center">Status</th>
-              <th className="py-3 px-3 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {bookings.map((b) => {
-              const guestName = b.customer?.name || 'Guest';
-              const initials = guestName
-                .split(' ')
-                .map((n) => n[0])
-                .join('')
-                .slice(0, 2)
-                .toUpperCase();
-
-              const paidAmount = paymentsByBooking[b.id] || 0;
-              const dueAmount = Math.max(0, Number(b.grand_total) - paidAmount);
-              const isPaid = b.payment_status === 'Paid' || b.payment_status === 'Fully Paid';
-              const isPartial = b.payment_status === 'Partially Paid';
-
-              return (
-                <tr
-                  key={b.id}
-                  onClick={() => navigate(`/app/bookings/${b.id}`)}
-                  className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                >
-                  {/* Guest Name & Phone */}
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
-                        {initials}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-slate-900 group-hover:text-emerald-800 transition-colors">
-                          {guestName}
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          {b.customer?.phone || b.customer?.email || 'Direct Walk-in'}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Booking Number */}
-                  <td className="py-3.5 px-3 font-mono font-medium text-slate-600">
-                    {b.booking_no}
-                  </td>
-
-                  {/* Property */}
-                  <td className="py-3.5 px-3 text-slate-600">
-                    <div className="truncate max-w-[130px] font-medium text-slate-800">
-                      {b.property?.name || '—'}
-                    </div>
-                  </td>
-
-                  {/* Stay Dates */}
-                  <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
-                    <div className="font-medium text-slate-800">
-                      {fmtDate(b.check_in)} → {fmtDate(b.check_out)}
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      {b.nights} {b.nights === 1 ? 'night' : 'nights'} · {b.guests} {b.guests === 1 ? 'guest' : 'guests'}
-                    </div>
-                  </td>
-
-                  {/* Room / Unit */}
-                  <td className="py-3.5 px-3">
-                    <div className="font-semibold text-slate-900">
-                      {b.room_number ? `Room ${b.room_number}` : b.room_type}
-                    </div>
-                    {b.room_number && (
-                      <div className="text-[10px] text-slate-400">{b.room_type}</div>
-                    )}
-                  </td>
-
-                  {/* Grand Total */}
-                  <td className="py-3.5 px-3 text-right font-bold text-slate-900 tabular-nums">
-                    {fmtINR(b.grand_total)}
-                  </td>
-
-                  {/* Balance Due */}
-                  <td className="py-3.5 px-3 text-right tabular-nums">
-                    {dueAmount > 0 ? (
-                      <span className="font-bold text-amber-800">{fmtINR(dueAmount)}</span>
-                    ) : (
-                      <span className="text-slate-400">₹0</span>
-                    )}
-                  </td>
-
-                  {/* Payment Status Badge */}
-                  <td className="py-3.5 px-3 text-center">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-semibold ${
-                        isPaid
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : isPartial
-                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                          : 'bg-rose-50 text-rose-800 border border-rose-200'
-                      }`}
-                    >
-                      {b.payment_status}
-                    </span>
-                  </td>
-
-                  {/* Booking Status Badge */}
-                  <td className="py-3.5 px-3 text-center">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                        b.booking_status === 'Checked In'
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : b.booking_status === 'Confirmed'
-                          ? 'bg-slate-100 text-slate-800'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {b.booking_status}
-                    </span>
-                  </td>
-
-                  {/* 1-Click Action */}
-                  <td className="py-3.5 px-3 text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/app/bookings/${b.id}`);
-                      }}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 p-1 rounded hover:bg-slate-100"
-                    >
-                      <span>Folio</span>
-                      <ChevronRight size={13} />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <DataTable
+      columns={columns}
+      data={bookings}
+      keyExtractor={(b) => b.id}
+      sortKey={sortKey}
+      sortOrder={sortOrder}
+      onSort={onSort}
+      page={page}
+      pageSize={pageSize}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      renderMobileCard={renderMobileCard}
+      emptyState={emptyState}
+    />
   );
-}
+};
+
+export default BookingTableView;
