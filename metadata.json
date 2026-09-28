@@ -1,6 +1,6 @@
 {
   "name": "MyTrackYo",
-  "description": "Property management software for hotels, homestays, hostels, and multi-property hospitality operators.",
+  "description": "Free property management software for hotels, homestays, hostels, and multi-property hospitality operators.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
