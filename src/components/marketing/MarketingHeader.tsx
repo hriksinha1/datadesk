@@ -1,130 +1,124 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Menu, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import BrandMark from './BrandMark';
-import { BRAND } from './siteConfig';
+
+const productLinks = [
+  ['Today', '#today'], ['Bookings', '#bookings'], ['Calendar', '#calendar'], ['Payments', '#payments'], ['Portfolio', '#portfolio'],
+] as const;
+const solutionLinks = [['Hotels', '#use-cases'], ['Homestays & lodges', '#use-cases'], ['Hostels & dorms', '#use-cases'], ['Small resorts', '#use-cases']] as const;
 
 export default function MarketingHeader() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [solutionsOpen, setSolutionsOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const { user, quickDemoAccess } = useAuth();
-  const navigate = useNavigate();
+  const [openMenu, setOpenMenu] = useState<'product' | 'solutions' | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef<HTMLElement>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileButtonRef = useRef<HTMLButtonElement>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (!panelRef.current || !triggerRef.current) return;
-      if (!panelRef.current.contains(event.target as Node) && !triggerRef.current.contains(event.target as Node)) {
-        setSolutionsOpen(false);
-      }
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setSolutionsOpen(false);
-        setMobileMenuOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
+    const hero = document.getElementById('hero');
+    if (!hero) return;
+    const observer = new IntersectionObserver(([entry]) => setScrolled(!entry.isIntersecting), { threshold: 0.03 });
+    observer.observe(hero);
+    return () => observer.disconnect();
   }, []);
 
-  const openDemoWorkspace = async () => {
-    if (!user) {
-      await quickDemoAccess();
-    }
-    navigate('/app');
-  };
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    mobileRef.current?.querySelector<HTMLElement>('a, button')?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileOpen(false);
+        mobileButtonRef.current?.focus();
+      }
+      if (event.key === 'Tab' && mobileRef.current) {
+        const items = [...mobileRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')];
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKey);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [mobileOpen]);
 
-  const closeMobileMenu = () => setMobileMenuOpen(false);
+  useEffect(() => {
+    if (!openMenu) return;
+    const handleOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpenMenu(null);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenMenu(null);
+        menuButtonRef.current?.focus();
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        const items = menuRef.current?.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]');
+        if (!items?.length) return;
+        event.preventDefault();
+        const current = [...items].indexOf(document.activeElement as HTMLAnchorElement);
+        const next = event.key === 'ArrowDown' ? (current + 1) % items.length : (current <= 0 ? items.length - 1 : current - 1);
+        items[next].focus();
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openMenu]);
+
+  const renderMenu = (type: 'product' | 'solutions', links: ReadonlyArray<readonly [string, string]>) => (
+    <div className="mk-nav-dropdown">
+      <button ref={menuButtonRef} className="mk-nav-trigger" type="button" aria-expanded={openMenu === type} aria-controls={`${type}-nav-menu`} onClick={(event) => { menuButtonRef.current = event.currentTarget; setOpenMenu(openMenu === type ? null : type); }}>
+        {type === 'product' ? 'Product' : 'For your property'}<ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {openMenu === type && <div className="mk-nav-menu" id={`${type}-nav-menu`} role="menu">{links.map(([label, href]) => <a key={label} href={href} role="menuitem" onClick={() => setOpenMenu(null)}>{label}</a>)}</div>}
+    </div>
+  );
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#E4E1D8] bg-[#F6F4EF]/90 backdrop-blur-sm">
-      <div className="mk-content flex h-16 items-center justify-between gap-4 md:h-20">
-        <div className="flex items-center gap-3 md:gap-6">
-          <Link to="/" className="flex items-center gap-2.5" aria-label="MyTrackYo home">
-            <BrandMark size={28} />
-            <div className="flex flex-col leading-none">
-              <span className="text-base font-bold tracking-[-0.04em] text-[#0E1726] md:text-lg">{BRAND.name}</span>
-              <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#0D5C4D]">Property OS</span>
-            </div>
-          </Link>
-
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
-            <a href="#product" className="rounded-lg px-3 py-2 text-sm font-medium text-[#4B5567] transition-colors hover:bg-white hover:text-[#0E1726]">Product</a>
-            <div className="relative">
-              <button
-                ref={triggerRef}
-                type="button"
-                aria-expanded={solutionsOpen}
-                aria-controls="solutions-menu"
-                className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-[#4B5567] transition-colors hover:bg-white hover:text-[#0E1726]"
-                onClick={() => setSolutionsOpen((v) => !v)}
-              >
-                Solutions
-                <ChevronDown size={14} className={solutionsOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
-              </button>
-              {solutionsOpen && (
-                <div ref={panelRef} id="solutions-menu" className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-[#E4E7EC] bg-white p-2 shadow-md">
-                  {['Hotels', 'Homestays', 'Hostels and dorms', 'Lodges', 'Multi-property managers'].map((item) => (
-                    <a key={item} href="#solutions" onClick={() => setSolutionsOpen(false)} className="block rounded-lg px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#F6F4EF] hover:text-[#0E1726]">
-                      {item}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-            <a href="#story" className="rounded-lg px-3 py-2 text-sm font-medium text-[#4B5567] transition-colors hover:bg-white hover:text-[#0E1726]">How it works</a>
-            <a href="#why-free" className="rounded-lg px-3 py-2 text-sm font-medium text-[#0D5C4D] transition-colors hover:bg-[#EAF4F1]">Why free</a>
-          </nav>
+    <header className={`mk-header ${scrolled ? 'is-scrolled' : ''}`}>
+      <div className="mk-shell mk-header-inner">
+        <Link to="/" className="mk-brand" aria-label="MyTrackYo home"><BrandMark size={32} /><span>MyTrackYo</span></Link>
+        <nav ref={menuRef} className="mk-desktop-nav" aria-label="Main navigation">
+          {renderMenu('product', productLinks)}
+          {renderMenu('solutions', solutionLinks)}
+          <a href="#morning">How it works</a>
+          <a href="#why">Why it exists</a>
+        </nav>
+        <div className="mk-header-actions">
+          <Link className="mk-login-link" to="/login">Log in</Link>
+          <Link className="mk-button-primary mk-header-cta" to={user ? '/app' : '/signup'}>{user ? 'Open workspace' : 'Create workspace'}</Link>
         </div>
-
-        <div className="hidden items-center gap-2 md:flex">
-          {user ? (
-            <Link to="/app" className="inline-flex items-center justify-center rounded-lg bg-[#0E1726] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16213A]">
-              Open workspace
-            </Link>
-          ) : (
-            <>
-              <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-[#4B5567] transition-colors hover:bg-white hover:text-[#0E1726]">Log in</Link>
-              <Link to="/signup" className="inline-flex items-center justify-center rounded-lg bg-[#0E1726] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16213A]">
-                Create free workspace
-              </Link>
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 md:hidden">
-          <Link to="/signup" className="inline-flex h-10 items-center justify-center rounded-lg bg-[#0E1726] px-3 text-sm font-semibold text-white">Create free</Link>
-          <button type="button" aria-label={mobileMenuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((v) => !v)} className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#E4E7EC] bg-white text-[#0E1726]">
-            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
-        </div>
+        <button ref={mobileButtonRef} className="mk-mobile-trigger" type="button" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-controls="mobile-navigation" onClick={() => setMobileOpen(true)}><Menu aria-hidden="true" /></button>
       </div>
-
-      {mobileMenuOpen && (
-        <div className="border-t border-[#E4E1D8] bg-white px-4 py-4 md:hidden">
-          <nav className="space-y-1" aria-label="Mobile navigation">
-            <a href="#product" onClick={closeMobileMenu} className="block rounded-lg px-3 py-3 text-base font-medium text-[#0E1726]">Product</a>
-            <a href="#story" onClick={closeMobileMenu} className="block rounded-lg px-3 py-3 text-base font-medium text-[#0E1726]">How it works</a>
-            <a href="#solutions" onClick={closeMobileMenu} className="block rounded-lg px-3 py-3 text-base font-medium text-[#0E1726]">Solutions</a>
-            <a href="#why-free" onClick={closeMobileMenu} className="block rounded-lg px-3 py-3 text-base font-medium text-[#0D5C4D]">Why free</a>
+      {mobileOpen && <div className="mk-mobile-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileOpen(false); }}>
+        <div id="mobile-navigation" ref={mobileRef} className="mk-mobile-dialog" role="dialog" aria-modal="true" aria-labelledby="mobile-nav-title">
+          <div className="mk-mobile-dialog-head"><span id="mobile-nav-title">Explore MyTrackYo</span><button type="button" aria-label="Close navigation" onClick={() => { setMobileOpen(false); mobileButtonRef.current?.focus(); }}><X aria-hidden="true" /></button></div>
+          <nav aria-label="Mobile navigation" className="mk-mobile-links">
+            {productLinks.map(([label, href]) => <a key={label} href={href} onClick={() => setMobileOpen(false)}>{label}</a>)}
+            <a href="#use-cases" onClick={() => setMobileOpen(false)}>For your property</a>
+            <a href="#morning" onClick={() => setMobileOpen(false)}>How it works</a>
+            <a href="#why" onClick={() => setMobileOpen(false)}>Why it exists</a>
           </nav>
-          <div className="mt-4 space-y-2 border-t border-[#E4E7EC] pt-4">
-            <Link to="/login" onClick={closeMobileMenu} className="block rounded-lg border border-[#E4E7EC] px-4 py-3 text-center text-sm font-semibold text-[#0E1726]">Log in</Link>
-            <button type="button" onClick={async () => { closeMobileMenu(); await openDemoWorkspace(); }} className="block w-full rounded-lg bg-[#0E1726] px-4 py-3 text-center text-sm font-semibold text-white">Open the sample workspace</button>
-            <Link to="/signup" onClick={closeMobileMenu} className="block rounded-lg bg-[#0D5C4D] px-4 py-3 text-center text-sm font-semibold text-white">Create free workspace</Link>
-          </div>
+          <div className="mk-mobile-actions"><Link to="/login" onClick={() => setMobileOpen(false)}>Log in</Link><Link className="mk-button-primary" to={user ? '/app' : '/signup'} onClick={() => setMobileOpen(false)}>{user ? 'Open workspace' : 'Create your workspace'}</Link></div>
         </div>
-      )}
+      </div>}
     </header>
   );
 }

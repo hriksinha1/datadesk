@@ -3,19 +3,67 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MyTrackYo | Property management for hotels, homestays, hostels and lodges</title>
-    <meta name="description" content="Know what is happening at your property before the phone rings. Track bookings, room occupancy, guest folios and payments in one calm workspace." />
-    <meta property="og:title" content="MyTrackYo | Property management for hospitality teams" />
-    <meta property="og:description" content="Know what is happening at your property before the phone rings. Track bookings, room occupancy, guest folios and payments in one calm workspace." />
+    <title>MyTrackYo | Property management for independent stays</title>
+    <meta name="description" content="See arrivals, room availability, bookings and guest balances in one clear property-management workspace." />
+    <link rel="canonical" href="https://zentrack-gamma.vercel.app/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:title" content="MyTrackYo | Property management for independent stays" />
+    <meta property="og:description" content="See arrivals, room availability, bookings and guest balances in one clear property-management workspace." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="MyTrackYo | Property management for hospitality teams" />
-    <meta name="twitter:description" content="Know what is happening at your property before the phone rings." />
-    <meta property="og:image" content="/og-image.png" />
-    <meta name="theme-color" content="#0E1726" />
+    <meta name="twitter:title" content="MyTrackYo | Property management for independent stays" />
+    <meta name="twitter:description" content="See arrivals, room availability, bookings and guest balances in one clear workspace." />
+    <meta property="og:image" content="https://zentrack-gamma.vercel.app/og-image.svg" />
+    <meta name="theme-color" content="#08241D" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "MyTrackYo",
+            "url": "https://zentrack-gamma.vercel.app/"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "MyTrackYo",
+            "description": "Property-management software for independent hospitality properties to manage bookings, guests, rooms, and payments.",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web"
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Can I connect Booking.com or Airbnb?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Not currently. Bookings are entered and managed in the workspace; channel-manager integrations are not present in the current app." }
+              },
+              {
+                "@type": "Question",
+                "name": "Where is my data stored?",
+                "acceptedAnswer": { "@type": "Answer", "text": "The sample workspace stores its data in your browser. When Appwrite is configured, signed-in workspace data uses the Appwrite repository." }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I export bookings?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. The bookings view includes a CSV export. Booking invoices and payment receipts can also be downloaded as PDFs." }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main>
+        <h1>Know who’s arriving, who owes, and which room is free.</h1>
+        <p>MyTrackYo keeps bookings, payments, and rooms in one clear view for independent hotels, homestays, and hostels.</p>
+        <p><a href="/signup">Create your workspace</a></p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AppShell from './components/layout/AppShell';
@@ -37,6 +37,23 @@ function RouteLoading() {
 
 function ProtectedWorkspaceRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading || !user) return;
+    let robotsMeta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    const shouldRemoveMeta = !robotsMeta;
+    if (!robotsMeta) {
+      robotsMeta = document.createElement('meta');
+      robotsMeta.name = 'robots';
+      document.head.appendChild(robotsMeta);
+    }
+    const previousValue = robotsMeta.content;
+    robotsMeta.content = 'noindex,nofollow';
+    return () => {
+      if (shouldRemoveMeta) robotsMeta?.remove();
+      else if (robotsMeta) robotsMeta.content = previousValue;
+    };
+  }, [loading, user]);
 
   if (loading) {
     return (

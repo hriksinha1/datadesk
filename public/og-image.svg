@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">MyTrackYo</title>
+  <desc id="description">Clarity for people who run real properties. Know who is arriving, who owes, and which room is free.</desc>
+  <rect width="1200" height="630" fill="#F6F3EC"/>
+  <path d="M0 0h1200v14H0z" fill="#0F5A45"/>
+  <rect x="86" y="78" width="56" height="56" rx="12" fill="#0E141B"/>
+  <path d="M101 91v30M127 91v30" stroke="#C58B2A" stroke-width="2" stroke-linecap="round"/>
+  <path d="M101 97h20M107 106h20M101 115h16" stroke="#FBFAF7" stroke-width="4" stroke-linecap="round"/>
+  <text x="162" y="117" fill="#0E141B" font-family="League Spartan, Arial, sans-serif" font-size="37" font-weight="600">MyTrackYo</text>
+  <text x="88" y="220" fill="#8A5D12" font-family="League Spartan, Arial, sans-serif" font-size="18" font-weight="500" letter-spacing="2">PROPERTY MANAGEMENT FOR INDEPENDENT STAYS</text>
+  <text x="84" y="326" fill="#1C2733" font-family="League Spartan, Arial, sans-serif" font-size="68" font-weight="600">Know who’s arriving,</text>
+  <text x="84" y="406" fill="#1C2733" font-family="League Spartan, Arial, sans-serif" font-size="68" font-weight="600">who owes, and which</text>
+  <text x="84" y="486" fill="#1C2733" font-family="League Spartan, Arial, sans-serif" font-size="68" font-weight="600">room is free.</text>
+  <path d="M87 546h1026" stroke="#C9C0AE" stroke-width="1"/>
+  <path d="M87 539v14M119 539v14M151 539v14M183 539v14" stroke="#C58B2A" stroke-width="2"/>
+  <rect x="203" y="542" width="76" height="8" rx="2" fill="#0F5A45"/>
+  <text x="88" y="592" fill="#46525F" font-family="League Spartan, Arial, sans-serif" font-size="22" font-weight="400">Bookings · Payments · Rooms</text>
+</svg>
