@@ -8,7 +8,7 @@ import { BRAND } from '../components/marketing/siteConfig';
 
 export default function HomePage() {
   useDocumentMeta({
-    title: 'MyTrackYo | Property management for independent stays',
+    title: 'Zentrack | Property management for independent stays',
     description: 'See arrivals, room availability, bookings and guest balances in one clear property-management workspace.',
     robots: 'index,follow',
     canonical: BRAND.homeUrl,
