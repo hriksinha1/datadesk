@@ -63,6 +63,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const quickDemoAccess = async () => {
+    const existing = await authService.getCurrentUser();
+    if (existing && !existing.isDemo) {
+      setUser(existing);
+      return existing;
+    }
+
     const profile = await authService.quickDemoLogin();
     setUser(profile);
     return profile;

@@ -23,6 +23,37 @@ type ShowcaseTab = 'dashboard' | 'bookings' | 'calendar' | 'payments' | 'guests'
 export default function InteractiveShowcaseSection() {
   const [activeTab, setActiveTab] = useState<ShowcaseTab>('dashboard');
 
+  const tabs: Array<{ id: ShowcaseTab; label: string; icon: typeof LayoutDashboard }> = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'bookings', label: 'Bookings', icon: Table },
+    { id: 'calendar', label: 'Tape Chart', icon: CalendarDays },
+    { id: 'payments', label: 'Payments', icon: CreditCard },
+    { id: 'guests', label: 'Guest Records', icon: Users },
+  ];
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const total = tabs.length;
+    let nextIndex = index;
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (index + 1) % total;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (index - 1 + total) % total;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = total - 1;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    const nextTab = tabs[nextIndex].id;
+    setActiveTab(nextTab);
+    const nextButton = document.getElementById(`tab-${nextTab}`) as HTMLButtonElement | null;
+    nextButton?.focus();
+  };
+
   return (
     <section id="product" className="py-20 lg:py-28 bg-white border-b border-slate-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,66 +72,27 @@ export default function InteractiveShowcaseSection() {
 
         {/* Tab Switcher */}
         <div className="flex justify-center mb-8">
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/80 gap-1 flex-wrap justify-center">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <LayoutDashboard size={15} />
-              <span>Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('bookings')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'bookings'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Table size={15} />
-              <span>Bookings</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('calendar')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'calendar'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <CalendarDays size={15} />
-              <span>Tape Chart</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'payments'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <CreditCard size={15} />
-              <span>Payments</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('guests')}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'guests'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Users size={15} />
-              <span>Guest Records</span>
-            </button>
+          <div role="tablist" aria-label="Product preview sections" className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/80 gap-1 flex-wrap justify-center">
+            {tabs.map(({ id, label, icon: Icon }, index) => (
+              <button
+                key={id}
+                id={`tab-${id}`}
+                role="tab"
+                aria-selected={activeTab === id}
+                aria-controls={`panel-${id}`}
+                tabIndex={activeTab === id ? 0 : -1}
+                onKeyDown={(event) => handleKeyDown(event, index)}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
+                  activeTab === id
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Icon size={15} />
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -126,7 +118,7 @@ export default function InteractiveShowcaseSection() {
 
           {/* TAB 1: DASHBOARD PREVIEW */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-4 p-2 sm:p-4 bg-slate-900/60 rounded-xl">
+            <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" className="space-y-4 p-2 sm:p-4 bg-slate-900/60 rounded-xl">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl">
                   <div className="text-[11px] text-slate-400 flex items-center justify-between">
@@ -179,7 +171,7 @@ export default function InteractiveShowcaseSection() {
 
           {/* TAB 2: BOOKINGS PREVIEW */}
           {activeTab === 'bookings' && (
-            <div className="p-2 sm:p-4 bg-slate-900/60 rounded-xl">
+            <div id="panel-bookings" role="tabpanel" aria-labelledby="tab-bookings" className="p-2 sm:p-4 bg-slate-900/60 rounded-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-left">
                   <thead>
@@ -262,7 +254,7 @@ export default function InteractiveShowcaseSection() {
 
           {/* TAB 3: CALENDAR TAPE CHART PREVIEW */}
           {activeTab === 'calendar' && (
-            <div className="p-2 sm:p-4 bg-slate-900/60 rounded-xl space-y-2">
+            <div id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar" className="p-2 sm:p-4 bg-slate-900/60 rounded-xl space-y-2">
               <div className="text-xs text-slate-400 flex items-center justify-between pb-2 border-b border-slate-800">
                 <span className="font-semibold text-white">Hospitality Tape Chart · Week View</span>
                 <span className="text-[11px] text-emerald-400">● Live Room Availability</span>
@@ -319,7 +311,7 @@ export default function InteractiveShowcaseSection() {
 
           {/* TAB 4: PAYMENTS PREVIEW */}
           {activeTab === 'payments' && (
-            <div className="p-2 sm:p-4 bg-slate-900/60 rounded-xl space-y-4">
+            <div id="panel-payments" role="tabpanel" aria-labelledby="tab-payments" className="p-2 sm:p-4 bg-slate-900/60 rounded-xl space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl">
                   <div className="text-[11px] text-slate-400 font-medium">Total Collected</div>
@@ -344,7 +336,7 @@ export default function InteractiveShowcaseSection() {
 
           {/* TAB 5: GUESTS PREVIEW */}
           {activeTab === 'guests' && (
-            <div className="p-2 sm:p-4 bg-slate-900/60 rounded-xl space-y-3">
+            <div id="panel-guests" role="tabpanel" aria-labelledby="tab-guests" className="p-2 sm:p-4 bg-slate-900/60 rounded-xl space-y-3">
               <div className="text-xs text-slate-400 pb-1">
                 Direct guest directory with phone, email, and historical stay folios.
               </div>

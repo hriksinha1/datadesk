@@ -227,6 +227,11 @@ export const authService = {
   },
 
   async quickDemoLogin(): Promise<UserProfile> {
+    const current = await this.getCurrentUser();
+    if (current && !current.isDemo) {
+      return current;
+    }
+
     const demoProfile: UserProfile = {
       id: 'demo-user-fern',
       name: 'Rohan Sharma',

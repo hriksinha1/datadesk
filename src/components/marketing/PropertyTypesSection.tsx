@@ -68,9 +68,9 @@ export default function PropertyTypesSection() {
         'For hospitality groups or owners operating multiple properties across different locations who need one unified platform to monitor occupancy, cash collection, and team performance.',
       highlights: [
         'Switch between properties instantly with isolated property folios',
-        'Consolidated owner dashboard with portfolio-wide revenue metrics',
-        'Individual tax configurations (GSTIN, legal entity) per location',
-        'Role-scoped user accounts for managers and reception staff',
+        'A consolidated owner dashboard with portfolio-wide revenue metrics',
+        'Tax settings configured per property, including GSTIN and legal details',
+        'A single property view that keeps operations, balances and bookings in one place',
       ],
       kpis: [
         { label: 'Properties', val: '2 to 10 Locations' },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, KeyRound, Database, Download, CheckCircle2 } from 'lucide-react';
+import { Shield, KeyRound, Database, Download, FolderOpen } from 'lucide-react';
 
 export default function TrustSecuritySection() {
   return (
@@ -10,10 +10,10 @@ export default function TrustSecuritySection() {
             TRANSPARENT ARCHITECTURE
           </span>
           <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mt-2">
-            Your property data belongs strictly to you.
+            A simple, honest system for daily hospitality work.
           </h2>
           <p className="mt-3 text-sm sm:text-base text-slate-600">
-            We prioritize operational reliability, privacy, and full data portability. No vendor lock-in.
+            The product is built to keep property data understandable and usable, with clear boundaries about what it does and what it does not yet do.
           </p>
         </div>
 
@@ -22,9 +22,9 @@ export default function TrustSecuritySection() {
             <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-3">
               <KeyRound size={18} />
             </div>
-            <div className="font-bold text-sm text-slate-900">Secure Authentication</div>
+            <div className="font-bold text-sm text-slate-900">Secure access</div>
             <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Protected login sessions backed by modern token verification so only authorized property managers access folios.
+              Sign-in sessions are handled through the application’s authentication flow, keeping access limited to the authorized workspace user.
             </p>
           </div>
 
@@ -32,9 +32,9 @@ export default function TrustSecuritySection() {
             <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-3">
               <Database size={18} />
             </div>
-            <div className="font-bold text-sm text-slate-900">Isolated Property Data</div>
+            <div className="font-bold text-sm text-slate-900">Property scope</div>
             <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Multi-property scoping ensures bookings, payments, and guest notes are strictly isolated per location.
+              Each property keeps its own room list, guest records, and payment movements so owner context stays clear.
             </p>
           </div>
 
@@ -42,19 +42,19 @@ export default function TrustSecuritySection() {
             <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-3">
               <Download size={18} />
             </div>
-            <div className="font-bold text-sm text-slate-900">Full CSV Data Export</div>
+            <div className="font-bold text-sm text-slate-900">CSV export</div>
             <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Export your reservations and guest records anytime in standard CSV format for accounting and tax filing.
+              Reservation and guest data can be exported in standard CSV format for accounting, tax review, and backup workflows.
             </p>
           </div>
 
           <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-2xs">
             <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center mb-3">
-              <Shield size={18} />
+              <FolderOpen size={18} />
             </div>
-            <div className="font-bold text-sm text-slate-900">Cloud Persistence</div>
+            <div className="font-bold text-sm text-slate-900">Demo-safe workflow</div>
             <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Access your reservation calendar and daily movements from your phone, reception desktop, or laptop anywhere.
+              Sample data stays in the browser, keeping the product preview separate from the real workspace and preserving the operator’s account context.
             </p>
           </div>
         </div>

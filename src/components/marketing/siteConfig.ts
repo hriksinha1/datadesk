@@ -13,7 +13,7 @@ export const BRAND = {
 
 export const SITE_NAV_ITEMS = [
   { label: 'Product', href: '#product' },
-  { label: 'Solutions', href: '#use-cases' },
+  { label: 'Solutions', href: '#solutions' },
   { label: 'How it works', href: '#story' },
   { label: 'Why free', href: '#why-free' },
 ];
@@ -25,15 +25,15 @@ export const FAQ_ITEMS = [
   },
   {
     question: 'Does it connect to Booking.com or Airbnb?',
-    answer: 'Not today. You enter bookings yourself in the workspace.'
+    answer: 'Not today. You enter bookings manually in the workspace.'
   },
   {
     question: 'Can I manage more than one property?',
-    answer: 'Yes. The workspace supports a property switcher and an all-properties view for owners with more than one property.'
+    answer: 'Yes. The workspace includes a property switcher and a portfolio view for owners with more than one property.'
   },
   {
     question: 'Does it handle GST?',
-    answer: 'A booking can have GST enabled at a chosen rate, and the invoice PDF includes the GST line and the property GSTIN when set. It does not file GST returns.'
+    answer: 'A booking can include GST at a chosen rate, and invoice PDFs include the GST line and property GSTIN when set. It does not file GST returns.'
   },
   {
     question: 'Do I need to install anything?',
@@ -41,10 +41,10 @@ export const FAQ_ITEMS = [
   },
   {
     question: 'Where is my data stored?',
-    answer: 'The sample workspace keeps everything in your own browser; nothing you enter is sent to a server. Accounts are handled by Appwrite authentication when configured.'
+    answer: 'The sample workspace keeps everything in the browser. When Appwrite is configured for authentication, the login session is handled there, but the property data remains browser-based in the demo workspace.'
   },
   {
     question: 'Can my staff log in?',
-    answer: 'Team accounts are not available yet.'
+    answer: 'Staff accounts are not available in the current product build.'
   }
 ];
